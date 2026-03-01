@@ -6,48 +6,34 @@
 
 #include <openxr/openxr.h>
 #include <array>
+#include <string.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-XrFormFactor GetXrFormFactor(const char* formFactorStr);
-XrViewConfigurationType GetXrViewConfigurationType(const char* viewConfigurationStr);
-XrEnvironmentBlendMode GetXrEnvironmentBlendMode(const char* environmentBlendModeStr);
-const char* GetXrEnvironmentBlendModeStr(XrEnvironmentBlendMode environmentBlendMode);
-#ifdef __cplusplus
-}
-#endif
+
+struct FixedString {
+    char c_str[32] = {0};
+    FixedString() { c_str[0] = 0; }
+    FixedString(const char* src) { memcpy(c_str, src, strlen(src)); }
+};
 
 struct Options {
-    std::string GraphicsPlugin;
-
-    std::string FormFactor{"Hmd"};
-
-    std::string ViewConfiguration{"Stereo"};
-
-    std::string EnvironmentBlendMode{"Opaque"};
-
-    std::string AppSpace{"Local"};
-
+    FixedString GraphicsPlugin = {};
+    FixedString FormFactor = FixedString("Hmd");
+    FixedString ViewConfiguration = FixedString("Stereo");
+    FixedString EnvironmentBlendMode = FixedString("Opaque");
+    FixedString AppSpace = FixedString("Local");
     struct {
         XrFormFactor FormFactor{XR_FORM_FACTOR_HEAD_MOUNTED_DISPLAY};
-
         XrViewConfigurationType ViewConfigType{XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO};
-
         XrEnvironmentBlendMode EnvironmentBlendMode{XR_ENVIRONMENT_BLEND_MODE_OPAQUE};
     } Parsed;
-
-    void ParseStrings() {
-        Parsed.FormFactor = GetXrFormFactor(FormFactor.c_str());
-        Parsed.ViewConfigType = GetXrViewConfigurationType(ViewConfiguration.c_str());
-        Parsed.EnvironmentBlendMode = GetXrEnvironmentBlendMode(EnvironmentBlendMode.c_str());
-    }
 
     std::array<float, 4> GetBackgroundClearColor() const {
         static const std::array<float, 4> SlateGrey{0.184313729f, 0.309803933f, 0.309803933f, 1.0f};
         static const std::array<float, 4> TransparentBlack{0.0f, 0.0f, 0.0f, 0.0f};
         static const std::array<float, 4> Black{0.0f, 0.0f, 0.0f, 1.0f};
-
         switch (Parsed.EnvironmentBlendMode) {
             case XR_ENVIRONMENT_BLEND_MODE_OPAQUE:
                 return SlateGrey;
@@ -59,9 +45,10 @@ struct Options {
                 return SlateGrey;
         }
     }
-
-    void SetEnvironmentBlendMode(XrEnvironmentBlendMode environmentBlendMode) {
-        EnvironmentBlendMode = GetXrEnvironmentBlendModeStr(environmentBlendMode);
-        Parsed.EnvironmentBlendMode = environmentBlendMode;
-    }
 };
+bool UpdateOptionsFromCommandLine(Options* options, int argc, char* argv[]);
+void SetEnvironmentBlendMode(Options* options, XrEnvironmentBlendMode environmentBlendMode);
+
+#ifdef __cplusplus
+}
+#endif

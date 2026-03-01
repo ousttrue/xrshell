@@ -57,7 +57,7 @@ XrPosef RotateCCWAboutYAxis(float radians, XrVector3f translation) {
 }  // namespace Pose
 }  // namespace Math
 
-inline XrReferenceSpaceCreateInfo GetXrReferenceSpaceCreateInfo(const std::string& referenceSpaceTypeStr) {
+inline XrReferenceSpaceCreateInfo GetXrReferenceSpaceCreateInfo(const char* referenceSpaceTypeStr) {
     XrReferenceSpaceCreateInfo referenceSpaceCreateInfo{XR_TYPE_REFERENCE_SPACE_CREATE_INFO};
     referenceSpaceCreateInfo.poseInReferenceSpace = Math::Pose::Identity();
     if (EqualsIgnoreCase(referenceSpaceTypeStr, "View")) {
@@ -83,7 +83,7 @@ inline XrReferenceSpaceCreateInfo GetXrReferenceSpaceCreateInfo(const std::strin
         referenceSpaceCreateInfo.poseInReferenceSpace = Math::Pose::RotateCCWAboutYAxis(-3.14f / 3.f, {2.f, 0.5f, -2.f});
         referenceSpaceCreateInfo.referenceSpaceType = XR_REFERENCE_SPACE_TYPE_STAGE;
     } else {
-        throw std::invalid_argument(Fmt("Unknown reference space type '%s'", referenceSpaceTypeStr.c_str()));
+        throw std::invalid_argument(Fmt("Unknown reference space type '%s'", referenceSpaceTypeStr));
     }
     return referenceSpaceCreateInfo;
 }
@@ -533,8 +533,9 @@ struct OpenXrProgram : IOpenXrProgram {
     void CreateVisualizedSpaces() {
         CHECK(m_session != XR_NULL_HANDLE);
 
-        std::string visualizedSpaces[] = {"ViewFront",        "Local", "Stage", "StageLeft", "StageRight", "StageLeftRotated",
-                                          "StageRightRotated"};
+        const char* visualizedSpaces[] = {
+            "ViewFront", "Local", "Stage", "StageLeft", "StageRight", "StageLeftRotated", "StageRightRotated",
+        };
 
         for (const auto& visualizedSpace : visualizedSpaces) {
             XrReferenceSpaceCreateInfo referenceSpaceCreateInfo = GetXrReferenceSpaceCreateInfo(visualizedSpace);
@@ -544,7 +545,7 @@ struct OpenXrProgram : IOpenXrProgram {
                 m_visualizedSpaces.push_back(space);
             } else {
                 Log::Write(Log::Level::Warning,
-                           Fmt("Failed to create reference space %s with error %d", visualizedSpace.c_str(), res));
+                           Fmt("Failed to create reference space %s with error %d", visualizedSpace, res));
             }
         }
     }
@@ -567,7 +568,7 @@ struct OpenXrProgram : IOpenXrProgram {
         CreateVisualizedSpaces();
 
         {
-            XrReferenceSpaceCreateInfo referenceSpaceCreateInfo = GetXrReferenceSpaceCreateInfo(m_options->AppSpace);
+            XrReferenceSpaceCreateInfo referenceSpaceCreateInfo = GetXrReferenceSpaceCreateInfo(m_options->AppSpace.c_str);
             CHECK_XRCMD(xrCreateReferenceSpace(m_session, &referenceSpaceCreateInfo, &m_appSpace));
         }
     }

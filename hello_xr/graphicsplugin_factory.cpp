@@ -92,13 +92,13 @@ std::map<std::string, GraphicsPluginFactory, IgnoreCaseStringLess> graphicsPlugi
 
 std::shared_ptr<IGraphicsPlugin> CreateGraphicsPlugin(const std::shared_ptr<Options>& options,
                                                       std::shared_ptr<IPlatformPlugin> platformPlugin) {
-    if (options->GraphicsPlugin.empty()) {
+    if (!options->GraphicsPlugin.c_str[0]) {
         throw std::invalid_argument("No graphics API specified");
     }
 
-    const auto apiIt = graphicsPluginMap.find(options->GraphicsPlugin);
+    const auto apiIt = graphicsPluginMap.find(options->GraphicsPlugin.c_str);
     if (apiIt == graphicsPluginMap.end()) {
-        throw std::invalid_argument(Fmt("Unsupported graphics API '%s'", options->GraphicsPlugin.c_str()));
+        throw std::invalid_argument(Fmt("Unsupported graphics API '%s'", options->GraphicsPlugin.c_str));
     }
 
     return apiIt->second(options, std::move(platformPlugin));
