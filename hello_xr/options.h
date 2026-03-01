@@ -4,53 +4,19 @@
 
 #pragma once
 
+#include <openxr/openxr.h>
 #include <array>
 
-inline XrFormFactor GetXrFormFactor(const std::string& formFactorStr) {
-    if (EqualsIgnoreCase(formFactorStr, "Hmd")) {
-        return XR_FORM_FACTOR_HEAD_MOUNTED_DISPLAY;
-    }
-    if (EqualsIgnoreCase(formFactorStr, "Handheld")) {
-        return XR_FORM_FACTOR_HANDHELD_DISPLAY;
-    }
-    throw std::invalid_argument(Fmt("Unknown form factor '%s'", formFactorStr.c_str()));
+#ifdef __cplusplus
+extern "C" {
+#endif
+XrFormFactor GetXrFormFactor(const char* formFactorStr);
+XrViewConfigurationType GetXrViewConfigurationType(const char* viewConfigurationStr);
+XrEnvironmentBlendMode GetXrEnvironmentBlendMode(const char* environmentBlendModeStr);
+const char* GetXrEnvironmentBlendModeStr(XrEnvironmentBlendMode environmentBlendMode);
+#ifdef __cplusplus
 }
-
-inline XrViewConfigurationType GetXrViewConfigurationType(const std::string& viewConfigurationStr) {
-    if (EqualsIgnoreCase(viewConfigurationStr, "Mono")) {
-        return XR_VIEW_CONFIGURATION_TYPE_PRIMARY_MONO;
-    }
-    if (EqualsIgnoreCase(viewConfigurationStr, "Stereo")) {
-        return XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;
-    }
-    throw std::invalid_argument(Fmt("Unknown view configuration '%s'", viewConfigurationStr.c_str()));
-}
-
-inline XrEnvironmentBlendMode GetXrEnvironmentBlendMode(const std::string& environmentBlendModeStr) {
-    if (EqualsIgnoreCase(environmentBlendModeStr, "Opaque")) {
-        return XR_ENVIRONMENT_BLEND_MODE_OPAQUE;
-    }
-    if (EqualsIgnoreCase(environmentBlendModeStr, "Additive")) {
-        return XR_ENVIRONMENT_BLEND_MODE_ADDITIVE;
-    }
-    if (EqualsIgnoreCase(environmentBlendModeStr, "AlphaBlend")) {
-        return XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND;
-    }
-    throw std::invalid_argument(Fmt("Unknown environment blend mode '%s'", environmentBlendModeStr.c_str()));
-}
-
-inline const char* GetXrEnvironmentBlendModeStr(XrEnvironmentBlendMode environmentBlendMode) {
-    switch (environmentBlendMode) {
-        case XR_ENVIRONMENT_BLEND_MODE_OPAQUE:
-            return "Opaque";
-        case XR_ENVIRONMENT_BLEND_MODE_ADDITIVE:
-            return "Additive";
-        case XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND:
-            return "AlphaBlend";
-        default:
-            throw std::invalid_argument(Fmt("Unknown environment blend mode '%s'", to_string(environmentBlendMode)));
-    }
-}
+#endif
 
 struct Options {
     std::string GraphicsPlugin;
@@ -72,9 +38,9 @@ struct Options {
     } Parsed;
 
     void ParseStrings() {
-        Parsed.FormFactor = GetXrFormFactor(FormFactor);
-        Parsed.ViewConfigType = GetXrViewConfigurationType(ViewConfiguration);
-        Parsed.EnvironmentBlendMode = GetXrEnvironmentBlendMode(EnvironmentBlendMode);
+        Parsed.FormFactor = GetXrFormFactor(FormFactor.c_str());
+        Parsed.ViewConfigType = GetXrViewConfigurationType(ViewConfiguration.c_str());
+        Parsed.EnvironmentBlendMode = GetXrEnvironmentBlendMode(EnvironmentBlendMode.c_str());
     }
 
     std::array<float, 4> GetBackgroundClearColor() const {
