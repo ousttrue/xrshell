@@ -38,15 +38,15 @@ const XR_SRCS = [_][]const u8{
 
 const LIBS = [_][]const u8{
     // "wayland-cursor",
-    // "wayland-egl",
-    "EGL",
-    "GLESv2",
-    // "wayland-client",
-    "X11-xcb",
-    "xcb",
-    "xcb-randr",
-    "xcb-xkb",
-    "xcb-keysyms",
+    // "EGL",
+    // "GLESv2",
+    "wayland-client",
+    "wayland-egl",
+    // "X11-xcb",
+    // "xcb",
+    // "xcb-randr",
+    // "xcb-xkb",
+    // "xcb-keysyms",
 };
 
 pub fn build(b: *std.Build) void {
@@ -95,9 +95,9 @@ pub fn build(b: *std.Build) void {
     const glad = try build_glad(b, target, optimize, b.path("glad2"));
     exe.linkLibrary(glad);
 
-    const gfx = build_gfxwrapper_opengl(b, target, optimize, b.path("gfx"));
-    gfx.linkLibrary(glad);
-    exe.linkLibrary(gfx);
+    // const gfx = build_gfxwrapper_opengl(b, target, optimize, b.path("gfx"));
+    // gfx.linkLibrary(glad);
+    // exe.linkLibrary(gfx);
 
     for (LIBS) |lib| {
         exe.linkSystemLibrary(lib);

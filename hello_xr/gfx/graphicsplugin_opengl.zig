@@ -9,6 +9,7 @@ const geometry = @import("../geometry.zig");
 // #include "options.h"
 //
 // #include <gfxwrapper_opengl.h>
+const gfxwrapper_opengl = @import("gfxwrapper_opengl_wayland.zig");
 // #include <common/xr_linear.h>
 //
 // #include <list>
@@ -198,7 +199,7 @@ pub fn InitializeDevice(instance: c.XrInstance, systemId: c.XrSystemId) void {
     var graphicsRequirements: c.XrGraphicsRequirementsOpenGLKHR = .{ .type = c.XR_TYPE_GRAPHICS_REQUIREMENTS_OPENGL_KHR };
     CHECK_XRCMD(@src(), (pfnGetOpenGLGraphicsRequirementsKHR.?)(instance, systemId, &graphicsRequirements));
 
-    c.gfxwrapper_opengl_init();
+    gfxwrapper_opengl.init();
 
     var major: c.GLint = 0;
     c.glGetIntegerv(c.GL_MAJOR_VERSION, &major);
@@ -245,7 +246,7 @@ pub fn InitializeDevice(instance: c.XrInstance, systemId: c.XrSystemId) void {
 // }
 
 pub fn GetGraphicsBinding() *c.XrBaseInStructure {
-    return @ptrCast(@alignCast(c.gfxwrapper_opengl_binding()));
+    return @ptrCast(@alignCast(gfxwrapper_opengl.binding()));
 }
 
 // void XR_GFX_AllocateSwapchainImageStructs(uint32_t capacity, const XrSwapchainCreateInfo& /*swapchainCreateInfo*/,
