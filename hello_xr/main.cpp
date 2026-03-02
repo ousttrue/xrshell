@@ -52,30 +52,30 @@ int main(int argc, char* argv[]) {
             std::shared_ptr<IGraphicsPlugin> graphicsPlugin = CreateGraphicsPlugin(options, platformPlugin);
 
             // Initialize the OpenXR program.
-            std::shared_ptr<IOpenXrProgram> program = CreateOpenXrProgram(options, platformPlugin, graphicsPlugin);
+            OpenXrProgram program(options, platformPlugin, graphicsPlugin);
 
-            program->CreateInstance();
-            program->InitializeSystem();
+            program.CreateInstance();
+            program.InitializeSystem();
 
-            SetEnvironmentBlendMode(options.get(), program->GetPreferredBlendMode());
+            SetEnvironmentBlendMode(options.get(), program.GetPreferredBlendMode());
             UpdateOptionsFromCommandLine(options.get(), argc, argv);
             platformPlugin->UpdateOptions(options);
             graphicsPlugin->UpdateOptions(options);
 
-            program->InitializeDevice();
-            program->InitializeSession();
-            program->CreateSwapchains();
+            program.InitializeDevice();
+            program.InitializeSession();
+            program.CreateSwapchains();
 
             while (!quitKeyPressed) {
                 bool exitRenderLoop = false;
-                program->PollEvents(&exitRenderLoop, &requestRestart);
+                program.PollEvents(&exitRenderLoop, &requestRestart);
                 if (exitRenderLoop) {
                     break;
                 }
 
-                if (program->IsSessionRunning()) {
-                    program->PollActions();
-                    program->RenderFrame();
+                if (program.IsSessionRunning()) {
+                    program.PollActions();
+                    program.RenderFrame();
                 } else {
                     // Throttle loop since xrWaitFrame won't be called.
                     std::this_thread::sleep_for(std::chrono::milliseconds(250));
