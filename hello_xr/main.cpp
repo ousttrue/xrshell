@@ -5,8 +5,8 @@
 #include "common.h"
 #include "options.h"
 
-#include "platformdata.h"
-#include "platformplugin.h"
+#include "platform/platformdata.h"
+#include "platform/platformplugin.h"
 #include "graphicsplugin.h"
 #include "openxr_program.h"
 

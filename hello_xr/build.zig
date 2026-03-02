@@ -19,9 +19,9 @@ const XR_FLAGS = [_][]const u8{
 
 const XR_SRCS = [_][]const u8{
     // "platformplugin_android.cpp",
-    "platformplugin_posix.cpp",
+    "platform/platformplugin_posix.cpp",
     // "platformplugin_win32.cpp",
-    "platformplugin_factory.cpp",
+    "platform/platformplugin_factory.cpp",
 
     // "d3d_common.cpp",
     // "graphicsplugin_d3d11.cpp",

@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-#include "xr_platform_include.h"
+#include "platform/xr_platform_include.h"
 #include "common.h"
 #include "geometry.h"
 #include "graphicsplugin.h"

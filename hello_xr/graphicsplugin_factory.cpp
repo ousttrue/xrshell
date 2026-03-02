@@ -4,7 +4,7 @@
 
 #include "common.h"
 #include "options.h"
-#include "platformdata.h"
+#include "platform/platformdata.h"
 #include "graphicsplugin.h"
 
 #include <functional>
