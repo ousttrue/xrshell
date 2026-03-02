@@ -6,7 +6,7 @@
 #include "common.h"
 #include "options.h"
 #include "platform/platformplugin.h"
-#include "graphicsplugin.h"
+#include "gfx/graphicsplugin.h"
 #include "openxr_program.h"
 #include <common/xr_linear.h>
 #include <array>

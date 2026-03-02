@@ -26,11 +26,11 @@ const XR_SRCS = [_][]const u8{
     // "d3d_common.cpp",
     // "graphicsplugin_d3d11.cpp",
     // "graphicsplugin_d3d12.cpp",
-    "graphicsplugin_opengl.cpp",
+    "gfx/graphicsplugin_opengl.cpp",
     // "graphicsplugin_opengles.cpp",
     // "graphicsplugin_vulkan.cpp",
     // "graphicsplugin_metal.cpp",
-    "graphicsplugin_factory.cpp",
+    "gfx/graphicsplugin_factory.cpp",
 
     "logger.cpp",
     "main.cpp",
@@ -107,7 +107,7 @@ pub fn build(b: *std.Build) void {
     const glad = try build_glad(b, target, optimize, b.path("glad2"));
     exe.linkLibrary(glad);
 
-    const gfx = build_gfxwrapper_opengl(b, target, optimize, b.path("gfxwrapper_opengl"));
+    const gfx = build_gfxwrapper_opengl(b, target, optimize, b.path("gfx"));
     gfx.linkLibrary(glad);
     exe.linkLibrary(gfx);
 
