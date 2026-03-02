@@ -1,6 +1,5 @@
 #pragma once
 #include <openxr/openxr.h>
-#include <memory>
 #include <set>
 #include <map>
 #include <vector>
@@ -31,9 +30,9 @@ struct InputState {
 };
 
 class OpenXrProgram {
-    const std::shared_ptr<const struct Options> m_options;
-    std::shared_ptr<struct IPlatformPlugin> m_platformPlugin;
-    std::shared_ptr<struct IGraphicsPlugin> m_graphicsPlugin;
+    const Options& m_options;
+    struct IPlatformPlugin* m_platformPlugin;
+    struct IGraphicsPlugin* m_graphicsPlugin;
     XrInstance m_instance{XR_NULL_HANDLE};
     XrSession m_session{XR_NULL_HANDLE};
     XrSpace m_appSpace{XR_NULL_HANDLE};
@@ -57,8 +56,7 @@ class OpenXrProgram {
     const std::set<XrEnvironmentBlendMode> m_acceptableBlendModes;
 
    public:
-    OpenXrProgram(const std::shared_ptr<struct Options>& options, const std::shared_ptr<struct IPlatformPlugin>& platformPlugin,
-                  const std::shared_ptr<struct IGraphicsPlugin>& graphicsPlugin);
+    OpenXrProgram(const struct Options& options, struct IPlatformPlugin* platformPlugin, struct IGraphicsPlugin* graphicsPlugin);
     ~OpenXrProgram();
 
     // Create an Instance and other basic instance-level initialization.

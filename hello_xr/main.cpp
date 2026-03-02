@@ -52,7 +52,7 @@ int main(int argc, char* argv[]) {
             std::shared_ptr<IGraphicsPlugin> graphicsPlugin = CreateGraphicsPlugin(options, platformPlugin);
 
             // Initialize the OpenXR program.
-            OpenXrProgram program(options, platformPlugin, graphicsPlugin);
+            OpenXrProgram program(*options, platformPlugin.get(), graphicsPlugin.get());
 
             program.CreateInstance();
             program.InitializeSystem();
