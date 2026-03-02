@@ -19,22 +19,21 @@ const XR_FLAGS = [_][]const u8{
 
 const XR_SRCS = [_][]const u8{
     // "platformplugin_android.cpp",
-    "platform/platformplugin_posix.cpp",
+    // "platform/platformplugin_posix.cpp",
     // "platformplugin_win32.cpp",
     // "platform/platformplugin_factory.cpp",
 
     // "d3d_common.cpp",
     // "graphicsplugin_d3d11.cpp",
     // "graphicsplugin_d3d12.cpp",
-    "gfx/graphicsplugin_opengl.cpp",
+    // "gfx/graphicsplugin_opengl.cpp",
     // "graphicsplugin_opengles.cpp",
     // "graphicsplugin_vulkan.cpp",
     // "graphicsplugin_metal.cpp",
     // "gfx/graphicsplugin_factory.cpp",
 
     "logger.cpp",
-    "main.cpp",
-    "openxr_program.cpp",
+    // "openxr_program.cpp",
 };
 
 const LIBS = [_][]const u8{
@@ -63,7 +62,7 @@ pub fn build(b: *std.Build) void {
     const exe = b.addExecutable(.{
         .name = "hello_xr",
         .root_module = b.createModule(.{
-            // .root_source_file = b.path("src/main.zig"),
+            .root_source_file = b.path("main.zig"),
             .target = target,
             .optimize = optimize,
             // .imports = &.{

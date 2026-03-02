@@ -1,7 +1,19 @@
 const std = @import("std");
-const c = @cImport({
-    @cInclude("openxr/openxr.h");
-});
+const c = @import("c.zig").openxr;
+const Options = @This();
+
+GraphicsPlugin: FixedString = .init(""),
+FormFactor: FixedString = .init("Hmd"),
+ViewConfiguration: FixedString = .init("Stereo"),
+EnvironmentBlendMode: FixedString = .init("Opaque"),
+AppSpace: FixedString = .init("Local"),
+parsed: Parsed = .{},
+
+fn ParseStrings(this: *@This()) !void {
+    this.parsed.FormFactor = try GetXrFormFactor(this.FormFactor);
+    this.parsed.ViewConfigType = try GetXrViewConfigurationType(this.ViewConfiguration);
+    this.parsed.EnvironmentBlendMode = try GetXrEnvironmentBlendMode(this.EnvironmentBlendMode);
+}
 
 fn GetXrFormFactor(formFactorStr: FixedString) !c.XrFormFactor {
     if (std.ascii.eqlIgnoreCase(formFactorStr.span(), "Hmd")) {
@@ -75,30 +87,30 @@ const Parsed = extern struct {
     EnvironmentBlendMode: c.XrEnvironmentBlendMode = c.XR_ENVIRONMENT_BLEND_MODE_OPAQUE,
 };
 
-const Options = extern struct {
-    GraphicsPlugin: FixedString = .init(""),
-    FormFactor: FixedString = .init("Hmd"),
-    ViewConfiguration: FixedString = .init("Stereo"),
-    EnvironmentBlendMode: FixedString = .init("Opaque"),
-    AppSpace: FixedString = .init("Local"),
-    parsed: Parsed = .{},
+fn ShowHelp() void {
+    // TODO: Improve/update when things are more settled.
+    std.log.info("HelloXr --graphics|-g <Graphics API> [--formfactor|-ff <Form factor>] [--viewconfig|-vc <View config>] " ++
+        "[--blendmode|-bm <Blend mode>] [--space|-s <Space>] [--verbose|-v]", .{});
+    std.log.info("Graphics APIs:            D3D11, D3D12, OpenGLES, OpenGL, Vulkan2, Vulkan, Metal", .{});
+    std.log.info("Form factors:             Hmd, Handheld", .{});
+    std.log.info("View configurations:      Mono, Stereo", .{});
+    std.log.info("Environment blend modes:  Opaque, Additive, AlphaBlend", .{});
+    std.log.info("Spaces:                   View, Local, Stage", .{});
+}
 
-    fn ParseStrings(this: *@This()) !void {
-        this.parsed.FormFactor = try GetXrFormFactor(this.FormFactor);
-        this.parsed.ViewConfigType = try GetXrViewConfigurationType(this.ViewConfiguration);
-        this.parsed.EnvironmentBlendMode = try GetXrEnvironmentBlendMode(this.EnvironmentBlendMode);
-    }
-};
+export fn SetEnvironmentBlendMode(options: *Options, environmentBlendMode: c.XrEnvironmentBlendMode) void {
+    options.EnvironmentBlendMode = GetXrEnvironmentBlendModeStr(environmentBlendMode);
+    options.parsed.EnvironmentBlendMode = environmentBlendMode;
+}
 
 const Parser = struct {
     options: *Options,
-    argv: [*][*:0]const u8,
-    argc: usize,
+    argv: [][*:0]u8,
     // Index 0 is the program name and is skipped.
     i: usize = 1,
 
     fn getNextArg(this: *@This()) []const u8 {
-        if (this.i >= this.argc) {
+        if (this.i >= this.argv.len) {
             @panic("Argument parameter missing");
         }
         defer this.i += 1;
@@ -106,7 +118,7 @@ const Parser = struct {
     }
 
     fn parse(this: *@This()) void {
-        while (this.i < this.argc) {
+        while (this.i < this.argv.len) {
             const arg = this.getNextArg();
             if (std.ascii.eqlIgnoreCase(arg, "--graphics") or std.ascii.eqlIgnoreCase(arg, "-g")) {
                 this.options.GraphicsPlugin = .init(this.getNextArg());
@@ -131,41 +143,25 @@ const Parser = struct {
     }
 };
 
-fn ShowHelp() void {
-    // TODO: Improve/update when things are more settled.
-    std.log.info("HelloXr --graphics|-g <Graphics API> [--formfactor|-ff <Form factor>] [--viewconfig|-vc <View config>] " ++
-        "[--blendmode|-bm <Blend mode>] [--space|-s <Space>] [--verbose|-v]", .{});
-    std.log.info("Graphics APIs:            D3D11, D3D12, OpenGLES, OpenGL, Vulkan2, Vulkan, Metal", .{});
-    std.log.info("Form factors:             Hmd, Handheld", .{});
-    std.log.info("View configurations:      Mono, Stereo", .{});
-    std.log.info("Environment blend modes:  Opaque, Additive, AlphaBlend", .{});
-    std.log.info("Spaces:                   View, Local, Stage", .{});
-}
-
-export fn SetEnvironmentBlendMode(options: *Options, environmentBlendMode: c.XrEnvironmentBlendMode) void {
-    options.EnvironmentBlendMode = GetXrEnvironmentBlendModeStr(environmentBlendMode);
-    options.parsed.EnvironmentBlendMode = environmentBlendMode;
-}
-
-export fn UpdateOptionsFromCommandLine(options: *Options, argc: c_int, argv: *[*:0]const u8) bool {
+pub fn UpdateOptionsFromCommandLine(this: *@This(), argv: [][*:0]u8) bool {
     var parser: Parser = .{
-        .options = options,
-        .argc = @intCast(argc),
-        .argv = @ptrCast(argv),
+        .options = this,
+        .argv = argv,
     };
     parser.parse();
 
     // Check for required parameters.
-    if (options.GraphicsPlugin.c_str[0] == 0) {
+    if (this.GraphicsPlugin.c_str[0] == 0) {
         std.log.err("GraphicsPlugin parameter is required", .{});
         ShowHelp();
         return false;
     }
 
-    if (options.ParseStrings()) {} else |e| {
+    if (this.ParseStrings()) {} else |e| {
         std.log.err("{s}", .{@errorName(e)});
         ShowHelp();
         return false;
     }
+
     return true;
 }
