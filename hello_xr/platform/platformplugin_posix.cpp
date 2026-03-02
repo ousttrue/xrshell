@@ -1,26 +1,18 @@
-// Copyright (c) 2017-2025 The Khronos Group Inc.
-//
-// SPDX-License-Identifier: Apache-2.0
-
-#include "common.h"
+// #include "common.h"
 #include "platformplugin.h"
 
-#if defined(XR_OS_APPLE) || defined(XR_OS_LINUX)
+// Create a platform plugin for the platform specified at compile time.
+void XR_PLATFORM_init(struct Options* options, struct PlatformData* data) {}
+void XR_PLATFORM_deinit() {}
 
-namespace {
-struct PosixPlatformPlugin : public IPlatformPlugin {
-    PosixPlatformPlugin(const std::shared_ptr<Options>& /*unused*/) {}
-
-    std::vector<std::string> GetInstanceExtensions() const override { return {}; }
-
-    XrBaseInStructure* GetInstanceCreateExtension() const override { return nullptr; }
-
-    void UpdateOptions(const std::shared_ptr<struct Options>& /*unused*/) override {}
-};
-}  // namespace
-
-std::shared_ptr<IPlatformPlugin> CreatePlatformPlugin_Posix(const std::shared_ptr<Options>& options) {
-    return std::make_shared<PosixPlatformPlugin>(options);
+// OpenXR instance-level extensions required by this platform.
+const char** XR_PLATFORM_GetInstanceExtensions(size_t* n) {
+    *n = 0;
+    return nullptr;
 }
 
-#endif  // defined(XR_OS_APPLE) || defined(XR_OS_LINUX)
+// Perform required steps after updating Options
+void XR_PLATFORM_UpdateOptions(struct Options* options) {}
+
+// Provide extension to XrInstanceCreateInfo for xrCreateInstance.
+XrBaseInStructure* XR_PLATFORM_GetInstanceCreateExtension() { return nullptr; }

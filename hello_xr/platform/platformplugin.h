@@ -1,25 +1,25 @@
-// Copyright (c) 2017-2025 The Khronos Group Inc.
-//
-// SPDX-License-Identifier: Apache-2.0
-
 #pragma once
 #include <openxr/openxr.h>
-#include <vector>
 
-// Wraps platform-specific implementation so the main openxr program can be platform-independent.
-struct IPlatformPlugin {
-    virtual ~IPlatformPlugin() = default;
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-    // Provide extension to XrInstanceCreateInfo for xrCreateInstance.
-    virtual XrBaseInStructure* GetInstanceCreateExtension() const = 0;
-
-    // OpenXR instance-level extensions required by this platform.
-    virtual std::vector<std::string> GetInstanceExtensions() const = 0;
-
-    // Perform required steps after updating Options
-    virtual void UpdateOptions(const std::shared_ptr<struct Options>& options) = 0;
+struct PlatformData {
+    void* applicationVM;
+    void* applicationActivity;
 };
 
 // Create a platform plugin for the platform specified at compile time.
-std::shared_ptr<IPlatformPlugin> CreatePlatformPlugin(const std::shared_ptr<struct Options>& options,
-                                                      const std::shared_ptr<struct PlatformData>& data);
+void XR_PLATFORM_init(struct Options* options, struct PlatformData* data);
+void XR_PLATFORM_deinit();
+// Provide extension to XrInstanceCreateInfo for xrCreateInstance.
+XrBaseInStructure* XR_PLATFORM_GetInstanceCreateExtension();
+// OpenXR instance-level extensions required by this platform.
+const char** XR_PLATFORM_GetInstanceExtensions(size_t* n);
+// Perform required steps after updating Options
+void XR_PLATFORM_UpdateOptions(struct Options* options);
+
+#ifdef __cplusplus
+}
+#endif

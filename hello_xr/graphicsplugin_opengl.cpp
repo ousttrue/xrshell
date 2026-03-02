@@ -48,8 +48,7 @@ static const char* FragmentShaderGlsl = R"_(
     )_";
 
 struct OpenGLGraphicsPlugin : public IGraphicsPlugin {
-    OpenGLGraphicsPlugin(const std::shared_ptr<Options>& options, const std::shared_ptr<IPlatformPlugin> /*unused*/&)
-        : m_clearColor(options->GetBackgroundClearColor()) {}
+    OpenGLGraphicsPlugin(const std::shared_ptr<Options>& options) : m_clearColor(options->GetBackgroundClearColor()) {}
 
     OpenGLGraphicsPlugin(const OpenGLGraphicsPlugin&) = delete;
     OpenGLGraphicsPlugin& operator=(const OpenGLGraphicsPlugin&) = delete;
@@ -350,9 +349,8 @@ struct OpenGLGraphicsPlugin : public IGraphicsPlugin {
 };
 }  // namespace
 
-std::shared_ptr<IGraphicsPlugin> CreateGraphicsPlugin_OpenGL(const std::shared_ptr<Options>& options,
-                                                             std::shared_ptr<IPlatformPlugin> platformPlugin) {
-    return std::make_shared<OpenGLGraphicsPlugin>(options, platformPlugin);
+std::shared_ptr<IGraphicsPlugin> CreateGraphicsPlugin_OpenGL(const std::shared_ptr<Options>& options) {
+    return std::make_shared<OpenGLGraphicsPlugin>(options);
 }
 
 #endif

@@ -5,7 +5,6 @@
 #include "common.h"
 #include "options.h"
 
-#include "platform/platformdata.h"
 #include "platform/platformplugin.h"
 #include "graphicsplugin.h"
 #include "openxr_program.h"
@@ -45,21 +44,18 @@ int main(int argc, char* argv[]) {
 
         bool requestRestart = false;
         do {
-            // Create platform-specific implementation.
-            std::shared_ptr<IPlatformPlugin> platformPlugin = CreatePlatformPlugin(options, data);
-
             // Create graphics API implementation.
-            std::shared_ptr<IGraphicsPlugin> graphicsPlugin = CreateGraphicsPlugin(options, platformPlugin);
+            std::shared_ptr<IGraphicsPlugin> graphicsPlugin = CreateGraphicsPlugin(options);
 
             // Initialize the OpenXR program.
-            OpenXrProgram program(*options, platformPlugin.get(), graphicsPlugin.get());
+            OpenXrProgram program(*options, graphicsPlugin.get());
 
             program.CreateInstance();
             program.InitializeSystem();
 
             SetEnvironmentBlendMode(options.get(), program.GetPreferredBlendMode());
             UpdateOptionsFromCommandLine(options.get(), argc, argv);
-            platformPlugin->UpdateOptions(options);
+            XR_PLATFORM_UpdateOptions(options.get());
             graphicsPlugin->UpdateOptions(options);
 
             program.InitializeDevice();

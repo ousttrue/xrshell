@@ -5,7 +5,6 @@
 #include <openxr/openxr.h>
 #include "common.h"
 #include "options.h"
-#include "platform/platformdata.h"
 #include "platform/platformplugin.h"
 #include "graphicsplugin.h"
 #include "openxr_program.h"
@@ -80,9 +79,8 @@ inline XrReferenceSpaceCreateInfo GetXrReferenceSpaceCreateInfo(const char* refe
     return referenceSpaceCreateInfo;
 }
 
-OpenXrProgram::OpenXrProgram(const Options& options, IPlatformPlugin* platformPlugin, IGraphicsPlugin* graphicsPlugin)
+OpenXrProgram::OpenXrProgram(const Options& options, IGraphicsPlugin* graphicsPlugin)
     : m_options(options),
-      m_platformPlugin(platformPlugin),
       m_graphicsPlugin(graphicsPlugin),
       m_acceptableBlendModes{XR_ENVIRONMENT_BLEND_MODE_OPAQUE, XR_ENVIRONMENT_BLEND_MODE_ADDITIVE,
                              XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND} {}
@@ -170,7 +168,12 @@ void OpenXrProgram::CreateInstanceInternal() {
     std::vector<const char*> extensions;
 
     // Transform platform and graphics extension std::strings to C strings.
-    const std::vector<std::string> platformExtensions = m_platformPlugin->GetInstanceExtensions();
+    std::vector<const char*> platformExtensions;
+    size_t n;
+    auto p = XR_PLATFORM_GetInstanceExtensions(&n);
+    if (p && n) {
+        platformExtensions.assign(p, p + n);
+    }
     std::transform(platformExtensions.begin(), platformExtensions.end(), std::back_inserter(extensions),
                    [](const std::string& ext) { return ext.c_str(); });
     const std::vector<std::string> graphicsExtensions = m_graphicsPlugin->GetInstanceExtensions();
@@ -178,7 +181,7 @@ void OpenXrProgram::CreateInstanceInternal() {
                    [](const std::string& ext) { return ext.c_str(); });
 
     XrInstanceCreateInfo createInfo{XR_TYPE_INSTANCE_CREATE_INFO};
-    createInfo.next = m_platformPlugin->GetInstanceCreateExtension();
+    createInfo.next = XR_PLATFORM_GetInstanceCreateExtension();
     createInfo.enabledExtensionCount = (uint32_t)extensions.size();
     createInfo.enabledExtensionNames = extensions.data();
 

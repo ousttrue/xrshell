@@ -21,7 +21,7 @@ const XR_SRCS = [_][]const u8{
     // "platformplugin_android.cpp",
     "platform/platformplugin_posix.cpp",
     // "platformplugin_win32.cpp",
-    "platform/platformplugin_factory.cpp",
+    // "platform/platformplugin_factory.cpp",
 
     // "d3d_common.cpp",
     // "graphicsplugin_d3d11.cpp",
