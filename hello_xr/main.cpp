@@ -5,8 +5,6 @@
 #include "common.h"
 #include "options.h"
 #include "openxr_program.h"
-#include "platform/platformplugin.h"
-#include "gfx/graphicsplugin.h"
 #include <thread>
 
 #if defined(_WIN32)
@@ -27,8 +25,6 @@ int main(int argc, char* argv[]) {
         if (!UpdateOptionsFromCommandLine(&options, argc, argv)) {
             return 1;
         }
-        XR_PLATFORM_init(&options, nullptr);
-        XR_GFX_init(&options);
 
         // std::shared_ptr<PlatformData> data = std::make_shared<PlatformData>();
 
@@ -44,28 +40,28 @@ int main(int argc, char* argv[]) {
         bool requestRestart = false;
         do {
             // Initialize the OpenXR program.
-            OpenXrProgram program(options);
+            XR_PROG_OpenXrProgram_init(&options);
 
-            program.CreateInstance();
-            program.InitializeSystem();
+            XR_PROG_CreateInstance();
+            XR_PROG_InitializeSystem();
 
-            SetEnvironmentBlendMode(&options, program.GetPreferredBlendMode());
+            SetEnvironmentBlendMode(&options, XR_PROG_GetPreferredBlendMode());
             UpdateOptionsFromCommandLine(&options, argc, argv);
 
-            program.InitializeDevice();
-            program.InitializeSession();
-            program.CreateSwapchains();
+            XR_PROG_InitializeDevice();
+            XR_PROG_InitializeSession();
+            XR_PROG_CreateSwapchains();
 
             while (!quitKeyPressed) {
                 bool exitRenderLoop = false;
-                program.PollEvents(&exitRenderLoop, &requestRestart);
+                XR_PROG_PollEvents(&exitRenderLoop, &requestRestart);
                 if (exitRenderLoop) {
                     break;
                 }
 
-                if (program.IsSessionRunning()) {
-                    program.PollActions();
-                    program.RenderFrame();
+                if (XR_PROG_IsSessionRunning()) {
+                    XR_PROG_PollActions();
+                    XR_PROG_RenderFrame();
                 } else {
                     // Throttle loop since xrWaitFrame won't be called.
                     std::this_thread::sleep_for(std::chrono::milliseconds(250));
