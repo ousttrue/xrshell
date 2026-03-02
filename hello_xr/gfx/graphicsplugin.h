@@ -10,7 +10,7 @@ struct Cube {
     XrVector3f Scale;
 };
 
-void XR_GFX_init();
+void XR_GFX_init(const struct Options* options);
 void XR_GFX_deinit();
 
 // OpenXR extensions required by this graphics API.

@@ -57,7 +57,10 @@ GLuint m_cubeIndexBuffer{0};
 std::map<uint32_t, uint32_t> m_colorToDepthMap;
 std::array<float, 4> m_clearColor;
 
-void XR_GFX_init(const Options* options) { m_clearColor = options->GetBackgroundClearColor(); }
+void XR_GFX_init(const Options* options) {
+    Log::Write(Log::Level::Info, "GFX => OpenGL");
+    m_clearColor = options->GetBackgroundClearColor();
+}
 // OpenGLGraphicsPlugin(const OpenGLGraphicsPlugin&) = delete;
 // OpenGLGraphicsPlugin& operator=(const OpenGLGraphicsPlugin&) = delete;
 // OpenGLGraphicsPlugin(OpenGLGraphicsPlugin&&) = delete;
@@ -89,11 +92,11 @@ void XR_GFX_deinit() {
     gfxwrapper_opengl_deinit();
 }
 
+static const char* extensions[]{
+    XR_KHR_OPENGL_ENABLE_EXTENSION_NAME,
+};
 const char** XR_GFX_GetInstanceExtensions(size_t* n) {
-    static const char* extensions[]{
-        XR_KHR_OPENGL_ENABLE_EXTENSION_NAME,
-    };
-    *n = sizeof(extensions);
+    *n = std::size(extensions);
     return extensions;
 }
 

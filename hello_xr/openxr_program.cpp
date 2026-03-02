@@ -79,10 +79,13 @@ inline XrReferenceSpaceCreateInfo GetXrReferenceSpaceCreateInfo(const char* refe
     return referenceSpaceCreateInfo;
 }
 
-OpenXrProgram::OpenXrProgram(const Options& options)
+OpenXrProgram::OpenXrProgram(Options& options)
     : m_options(options),
       m_acceptableBlendModes{XR_ENVIRONMENT_BLEND_MODE_OPAQUE, XR_ENVIRONMENT_BLEND_MODE_ADDITIVE,
-                             XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND} {}
+                             XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND} {
+    XR_PLATFORM_UpdateOptions(&options);
+    XR_GFX_UpdateOptions(&options);
+}
 
 OpenXrProgram::~OpenXrProgram() {
     if (m_input.actionSet != XR_NULL_HANDLE) {
@@ -139,7 +142,6 @@ static void LogLayersAndExtensions() {
         CHECK_XRCMD(xrEnumerateApiLayerProperties(0, &layerCount, nullptr));
         std::vector<XrApiLayerProperties> layers(layerCount, {XR_TYPE_API_LAYER_PROPERTIES});
         CHECK_XRCMD(xrEnumerateApiLayerProperties((uint32_t)layers.size(), &layerCount, layers.data()));
-
         Log::Write(Log::Level::Info, Fmt("Available Layers: (%d)", layerCount));
         for (const XrApiLayerProperties& layer : layers) {
             Log::Write(Log::Level::Verbose,
@@ -165,28 +167,22 @@ void OpenXrProgram::CreateInstanceInternal() {
 
     // Create union of extensions required by platform and graphics plugins.
     std::vector<const char*> extensions;
-
-    // Transform platform and graphics extension std::strings to C strings.
-    std::vector<const char*> platformExtensions;
     {
         size_t n;
         auto p = XR_PLATFORM_GetInstanceExtensions(&n);
-        if (p && n) {
-            platformExtensions.assign(p, p + n);
+        for (size_t i = 0; i < n; ++i) {
+            Log::Write(Log::Level::Info, Fmt("PLATFORM[%d]extension: %s", i, p[i]));
+            extensions.push_back(p[i]);
         }
     }
-    std::transform(platformExtensions.begin(), platformExtensions.end(), std::back_inserter(extensions),
-                   [](const std::string& ext) { return ext.c_str(); });
-    std::vector<const char*> graphicsExtensions;
     {
-        size_t n = 0;
+        size_t n;
         auto p = XR_GFX_GetInstanceExtensions(&n);
-        if (n && p) {
-            graphicsExtensions.assign(p, p + n);
+        for (size_t i = 0; i < n; ++i) {
+            Log::Write(Log::Level::Info, Fmt("GFX[%d]extension: %s", i, p[i]));
+            extensions.push_back(p[i]);
         }
     }
-    std::transform(graphicsExtensions.begin(), graphicsExtensions.end(), std::back_inserter(extensions),
-                   [](const std::string& ext) { return ext.c_str(); });
 
     XrInstanceCreateInfo createInfo{XR_TYPE_INSTANCE_CREATE_INFO};
     createInfo.next = XR_PLATFORM_GetInstanceCreateExtension();
@@ -203,9 +199,7 @@ void OpenXrProgram::CreateInstanceInternal() {
 
 void OpenXrProgram::CreateInstance() {
     LogLayersAndExtensions();
-
     CreateInstanceInternal();
-
     LogInstanceInfo();
 }
 

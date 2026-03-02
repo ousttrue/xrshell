@@ -30,7 +30,7 @@ struct InputState {
 };
 
 class OpenXrProgram {
-    const Options& m_options;
+    Options& m_options;
     XrInstance m_instance{XR_NULL_HANDLE};
     XrSession m_session{XR_NULL_HANDLE};
     XrSpace m_appSpace{XR_NULL_HANDLE};
@@ -54,7 +54,7 @@ class OpenXrProgram {
     const std::set<XrEnvironmentBlendMode> m_acceptableBlendModes;
 
    public:
-    OpenXrProgram(const struct Options& options);
+    OpenXrProgram(struct Options& options);
     ~OpenXrProgram();
 
     // Create an Instance and other basic instance-level initialization.

@@ -4,13 +4,10 @@
 
 #include "common.h"
 #include "options.h"
-
+#include "openxr_program.h"
 #include "platform/platformplugin.h"
 #include "gfx/graphicsplugin.h"
-#include "openxr_program.h"
-
 #include <thread>
-#include <string.h>
 
 #if defined(_WIN32)
 // Favor the high performance NVIDIA or AMD GPUs
@@ -30,8 +27,10 @@ int main(int argc, char* argv[]) {
         if (!UpdateOptionsFromCommandLine(&options, argc, argv)) {
             return 1;
         }
+        XR_PLATFORM_init(&options, nullptr);
+        XR_GFX_init(&options);
 
-        std::shared_ptr<PlatformData> data = std::make_shared<PlatformData>();
+        // std::shared_ptr<PlatformData> data = std::make_shared<PlatformData>();
 
         // Spawn a thread to wait for a keypress
         static bool quitKeyPressed = false;
@@ -52,8 +51,6 @@ int main(int argc, char* argv[]) {
 
             SetEnvironmentBlendMode(&options, program.GetPreferredBlendMode());
             UpdateOptionsFromCommandLine(&options, argc, argv);
-            XR_PLATFORM_UpdateOptions(&options);
-            XR_GFX_UpdateOptions(&options);
 
             program.InitializeDevice();
             program.InitializeSession();
