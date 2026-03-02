@@ -98,9 +98,9 @@ fn ShowHelp() void {
     std.log.info("Spaces:                   View, Local, Stage", .{});
 }
 
-export fn SetEnvironmentBlendMode(options: *Options, environmentBlendMode: c.XrEnvironmentBlendMode) void {
-    options.EnvironmentBlendMode = GetXrEnvironmentBlendModeStr(environmentBlendMode);
-    options.parsed.EnvironmentBlendMode = environmentBlendMode;
+pub fn SetEnvironmentBlendMode(this: *@This(), environmentBlendMode: c.XrEnvironmentBlendMode) void {
+    this.EnvironmentBlendMode = GetXrEnvironmentBlendModeStr(environmentBlendMode);
+    this.parsed.EnvironmentBlendMode = environmentBlendMode;
 }
 
 const Parser = struct {

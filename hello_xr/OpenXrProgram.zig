@@ -1,6 +1,8 @@
 const std = @import("std");
 const c = @import("c.zig").openxr;
 const xr_result = @import("xr_result.zig");
+const xr_util = @import("xr_util.zig");
+const CHECK_XRCMD = xr_util.CHECK_XRCMD;
 // #include <openxr/openxr.h>
 // #include "common.h"
 // #include "options.h"
@@ -87,16 +89,16 @@ fn GetXrVersionString(ver: c.XrVersion) ![]const u8 {
 
 var m_options: *Options = undefined;
 var m_instance: c.XrInstance = null;
-// XrSession m_session{XR_NULL_HANDLE};
-// XrSpace m_appSpace{XR_NULL_HANDLE};
-// XrSystemId m_systemId{XR_NULL_SYSTEM_ID};
-//
+var m_session: c.XrSession = null;
+var m_appSpace: c.XrSpace = null;
+var m_systemId: c.XrSystemId = c.XR_NULL_SYSTEM_ID;
+
 // struct Swapchain {
 //     XrSwapchain handle;
 //     int32_t width;
 //     int32_t height;
 // };
-//
+
 // namespace Side {
 // const int LEFT = 0;
 // const int RIGHT = 1;
@@ -129,9 +131,6 @@ var m_instance: c.XrInstance = null;
 //
 // XrEventDataBuffer m_eventDataBuffer;
 // InputState m_input;
-//
-// const std::set<XrEnvironmentBlendMode> m_acceptableBlendModes = {
-//     XR_ENVIRONMENT_BLEND_MODE_OPAQUE, XR_ENVIRONMENT_BLEND_MODE_ADDITIVE, XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND};
 
 pub fn init(options: *Options) void {
     m_options = options;
@@ -165,30 +164,6 @@ pub fn init(options: *Options) void {
 //         xrDestroyInstance(m_instance);
 //     }
 // }
-
-fn to_string(res: c.XrResult) []const u8 {
-    const e: xr_result.XrResult = @enumFromInt(res);
-    return @tagName(e);
-}
-
-fn ThrowXrResult(res: c.XrResult, sourceLocation: std.builtin.SourceLocation) void {
-    std.log.err("XrResult failure [{s}] {}", .{ to_string(res), sourceLocation });
-    @panic("");
-}
-
-fn CheckXrResult(res: c.XrResult, originator: []const u8, sourceLocation: []const u8) c.XrResult {
-    if (c.XR_FAILED(res)) {
-        ThrowXrResult(res, originator, sourceLocation);
-    }
-
-    return res;
-}
-
-fn CHECK_XRCMD(sourceLocation: std.builtin.SourceLocation, res: c.XrResult) void {
-    if (c.XR_FAILED(res)) {
-        ThrowXrResult(res, sourceLocation);
-    }
-}
 
 fn makeIndent(allocator: std.mem.Allocator, indent: usize) ![]const u8 {
     const str = try allocator.alloc(u8, indent);
@@ -306,109 +281,135 @@ pub fn CreateInstance(allocator: std.mem.Allocator) !void {
     try LogInstanceInfo();
 }
 
-// static void LogEnvironmentBlendMode(XrViewConfigurationType type) {
-//     CHECK(m_instance != XR_NULL_HANDLE);
-//     CHECK(m_systemId != 0);
-//
-//     uint32_t count;
-//     CHECK_XRCMD(xrEnumerateEnvironmentBlendModes(m_instance, m_systemId, type, 0, &count, nullptr));
-//     CHECK(count > 0);
-//
-//     Log::Write(Log::Level::Info, Fmt("Available Environment Blend Mode count : (%d)", count));
-//
-//     std::vector<XrEnvironmentBlendMode> blendModes(count);
-//     CHECK_XRCMD(xrEnumerateEnvironmentBlendModes(m_instance, m_systemId, type, count, &count, blendModes.data()));
-//
-//     bool blendModeFound = false;
-//     for (XrEnvironmentBlendMode mode : blendModes) {
-//         const bool blendModeMatch = (mode == m_options->Parsed.EnvironmentBlendMode);
-//         Log::Write(Log::Level::Info, Fmt("Environment Blend Mode (%s) : %s", to_string(mode), blendModeMatch ? "(Selected)" : ""));
-//         blendModeFound |= blendModeMatch;
-//     }
-//     CHECK(blendModeFound);
-// }
-//
-// XrEnvironmentBlendMode XR_PROG_GetPreferredBlendMode() {
-//     uint32_t count;
-//     CHECK_XRCMD(xrEnumerateEnvironmentBlendModes(m_instance, m_systemId, m_options->Parsed.ViewConfigType, 0, &count, nullptr));
-//     CHECK(count > 0);
-//
-//     std::vector<XrEnvironmentBlendMode> blendModes(count);
-//     CHECK_XRCMD(xrEnumerateEnvironmentBlendModes(m_instance, m_systemId, m_options->Parsed.ViewConfigType, count, &count,
-//                                                  blendModes.data()));
-//     for (const auto& blendMode : blendModes) {
-//         if (m_acceptableBlendModes.count(blendMode)) return blendMode;
-//     }
-//     THROW("No acceptable blend mode returned from the xrEnumerateEnvironmentBlendModes");
-// }
-//
-// void XR_PROG_InitializeSystem() {
-//     CHECK(m_instance != XR_NULL_HANDLE);
-//     CHECK(m_systemId == XR_NULL_SYSTEM_ID);
-//
-//     XrSystemGetInfo systemInfo{XR_TYPE_SYSTEM_GET_INFO};
-//     systemInfo.formFactor = m_options->Parsed.FormFactor;
-//     CHECK_XRCMD(xrGetSystem(m_instance, &systemInfo, &m_systemId));
-//
-//     Log::Write(Log::Level::Verbose, Fmt("Using system %d for form factor %s", m_systemId, to_string(m_options->Parsed.FormFactor)));
-//     CHECK(m_instance != XR_NULL_HANDLE);
-//     CHECK(m_systemId != XR_NULL_SYSTEM_ID);
-// }
-//
-// static void LogViewConfigurations() {
-//     CHECK(m_instance != XR_NULL_HANDLE);
-//     CHECK(m_systemId != XR_NULL_SYSTEM_ID);
-//
-//     uint32_t viewConfigTypeCount;
-//     CHECK_XRCMD(xrEnumerateViewConfigurations(m_instance, m_systemId, 0, &viewConfigTypeCount, nullptr));
-//     std::vector<XrViewConfigurationType> viewConfigTypes(viewConfigTypeCount);
-//     CHECK_XRCMD(
-//         xrEnumerateViewConfigurations(m_instance, m_systemId, viewConfigTypeCount, &viewConfigTypeCount, viewConfigTypes.data()));
-//     CHECK((uint32_t)viewConfigTypes.size() == viewConfigTypeCount);
-//
-//     Log::Write(Log::Level::Info, Fmt("Available View Configuration Types: (%d)", viewConfigTypeCount));
-//     for (XrViewConfigurationType viewConfigType : viewConfigTypes) {
-//         Log::Write(Log::Level::Verbose, Fmt("  View Configuration Type: %s %s", to_string(viewConfigType),
-//                                             viewConfigType == m_options->Parsed.ViewConfigType ? "(Selected)" : ""));
-//
-//         XrViewConfigurationProperties viewConfigProperties{XR_TYPE_VIEW_CONFIGURATION_PROPERTIES};
-//         CHECK_XRCMD(xrGetViewConfigurationProperties(m_instance, m_systemId, viewConfigType, &viewConfigProperties));
-//
-//         Log::Write(Log::Level::Verbose,
-//                    Fmt("  View configuration FovMutable=%s", viewConfigProperties.fovMutable == XR_TRUE ? "True" : "False"));
-//
-//         uint32_t viewCount;
-//         CHECK_XRCMD(xrEnumerateViewConfigurationViews(m_instance, m_systemId, viewConfigType, 0, &viewCount, nullptr));
-//         if (viewCount > 0) {
-//             std::vector<XrViewConfigurationView> views(viewCount, {XR_TYPE_VIEW_CONFIGURATION_VIEW});
-//             CHECK_XRCMD(
-//                 xrEnumerateViewConfigurationViews(m_instance, m_systemId, viewConfigType, viewCount, &viewCount, views.data()));
-//
-//             for (uint32_t i = 0; i < views.size(); i++) {
-//                 const XrViewConfigurationView& view = views[i];
-//
-//                 Log::Write(Log::Level::Verbose,
-//                            Fmt("    View [%d]: Recommended Width=%d Height=%d SampleCount=%d", i, view.recommendedImageRectWidth,
-//                                view.recommendedImageRectHeight, view.recommendedSwapchainSampleCount));
-//                 Log::Write(Log::Level::Verbose, Fmt("    View [%d]:     Maximum Width=%d Height=%d SampleCount=%d", i,
-//                                                     view.maxImageRectWidth, view.maxImageRectHeight, view.maxSwapchainSampleCount));
-//             }
-//         } else {
-//             Log::Write(Log::Level::Error, Fmt("Empty view configuration type"));
-//         }
-//
-//         LogEnvironmentBlendMode(viewConfigType);
-//     }
-// }
-//
-// void XR_PROG_InitializeDevice() {
-//     LogViewConfigurations();
-//
-//     // The graphics API can initialize the graphics device now that the systemId and instance
-//     // handle are available.
-//     XR_GFX_InitializeDevice(m_instance, m_systemId);
-// }
-//
+fn LogEnvironmentBlendMode(allocator: std.mem.Allocator, _type: c.XrViewConfigurationType) !void {
+    std.debug.assert(m_instance != null);
+    std.debug.assert(m_systemId != 0);
+
+    var count: u32 = undefined;
+    CHECK_XRCMD(@src(), c.xrEnumerateEnvironmentBlendModes(m_instance, m_systemId, _type, 0, &count, null));
+    std.debug.assert(count > 0);
+
+    std.log.info("Available Environment Blend Mode count : ({})", .{count});
+
+    const blendModes = try allocator.alloc(c.XrEnvironmentBlendMode, count);
+    defer allocator.free(blendModes);
+    CHECK_XRCMD(@src(), c.xrEnumerateEnvironmentBlendModes(m_instance, m_systemId, _type, count, &count, blendModes.ptr));
+
+    var blendModeFound = false;
+    for (blendModes) |mode| {
+        const blendModeMatch = (mode == m_options.parsed.EnvironmentBlendMode);
+        std.log.info("Environment Blend Mode ({}) : {s}", .{ mode, if (blendModeMatch) "(Selected)" else "" });
+        blendModeFound |= blendModeMatch;
+    }
+    std.debug.assert(blendModeFound);
+}
+
+const m_acceptableBlendModes = [_]c.XrEnvironmentBlendMode{
+    c.XR_ENVIRONMENT_BLEND_MODE_OPAQUE,
+    c.XR_ENVIRONMENT_BLEND_MODE_ADDITIVE,
+    c.XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND,
+};
+
+pub fn GetPreferredBlendMode(allocator: std.mem.Allocator) !c.XrEnvironmentBlendMode {
+    var count: u32 = undefined;
+    CHECK_XRCMD(@src(), c.xrEnumerateEnvironmentBlendModes(m_instance, m_systemId, m_options.parsed.ViewConfigType, 0, &count, null));
+    std.debug.assert(count > 0);
+
+    const blendModes = try allocator.alloc(c.XrEnvironmentBlendMode, count);
+    defer allocator.free(blendModes);
+    CHECK_XRCMD(@src(), c.xrEnumerateEnvironmentBlendModes(m_instance, m_systemId, m_options.parsed.ViewConfigType, count, &count, blendModes.ptr));
+    for (blendModes) |blendMode| {
+        for (m_acceptableBlendModes) |mode| {
+            if (blendMode == mode) {
+                return blendMode;
+            }
+        }
+    }
+    // THROW("No acceptable blend mode returned from the xrEnumerateEnvironmentBlendModes");
+    return error.NoAcceptableBlendMode;
+}
+
+pub fn InitializeSystem() void {
+    std.debug.assert(m_instance != null);
+    std.debug.assert(m_systemId == c.XR_NULL_SYSTEM_ID);
+
+    const systemInfo: c.XrSystemGetInfo = .{
+        .type = c.XR_TYPE_SYSTEM_GET_INFO,
+        .formFactor = m_options.parsed.FormFactor,
+    };
+    CHECK_XRCMD(@src(), c.xrGetSystem(m_instance, &systemInfo, &m_systemId));
+
+    std.log.debug("Using system {} for form factor {}", .{
+        m_systemId,
+        m_options.parsed.FormFactor,
+    });
+    std.debug.assert(m_instance != null);
+    std.debug.assert(m_systemId != c.XR_NULL_SYSTEM_ID);
+}
+
+fn LogViewConfigurations(allocator: std.mem.Allocator) !void {
+    std.debug.assert(m_instance != null);
+    std.debug.assert(m_systemId != c.XR_NULL_SYSTEM_ID);
+
+    var viewConfigTypeCount: u32 = undefined;
+    CHECK_XRCMD(@src(), c.xrEnumerateViewConfigurations(m_instance, m_systemId, 0, &viewConfigTypeCount, null));
+    const viewConfigTypes = try allocator.alloc(c.XrViewConfigurationType, viewConfigTypeCount);
+    defer allocator.free(viewConfigTypes);
+    CHECK_XRCMD(@src(), c.xrEnumerateViewConfigurations(m_instance, m_systemId, viewConfigTypeCount, &viewConfigTypeCount, viewConfigTypes.ptr));
+    std.debug.assert(viewConfigTypes.len == viewConfigTypeCount);
+
+    std.log.info("Available View Configuration Types: ({})", .{viewConfigTypeCount});
+    for (viewConfigTypes) |viewConfigType| {
+        std.log.debug("  View Configuration Type: {} {s}", .{
+            viewConfigType,
+            if (viewConfigType == m_options.parsed.ViewConfigType) "(Selected)" else "",
+        });
+
+        var viewConfigProperties: c.XrViewConfigurationProperties = .{ .type = c.XR_TYPE_VIEW_CONFIGURATION_PROPERTIES };
+        CHECK_XRCMD(@src(), c.xrGetViewConfigurationProperties(m_instance, m_systemId, viewConfigType, &viewConfigProperties));
+
+        std.log.debug("  View configuration FovMutable={s}", .{
+            if (viewConfigProperties.fovMutable == c.XR_TRUE) "True" else "False",
+        });
+
+        var viewCount: u32 = undefined;
+        CHECK_XRCMD(@src(), c.xrEnumerateViewConfigurationViews(m_instance, m_systemId, viewConfigType, 0, &viewCount, null));
+        if (viewCount > 0) {
+            const views = try allocator.alloc(c.XrViewConfigurationView, viewCount);
+            defer allocator.free(views);
+            for (views) |*view| {
+                view.* = .{ .type = c.XR_TYPE_VIEW_CONFIGURATION_VIEW };
+            }
+            CHECK_XRCMD(@src(), c.xrEnumerateViewConfigurationViews(m_instance, m_systemId, viewConfigType, viewCount, &viewCount, views.ptr));
+
+            for (views, 0..) |view, i| {
+                std.log.debug("    View [{}]: Recommended Width={} Height={} SampleCount={}", .{
+                    i,                               view.recommendedImageRectWidth,
+                    view.recommendedImageRectHeight, view.recommendedSwapchainSampleCount,
+                });
+                std.log.debug("    View [{}]:     Maximum Width={} Height={} SampleCount={}", .{
+                    i,
+                    view.maxImageRectWidth,
+                    view.maxImageRectHeight,
+                    view.maxSwapchainSampleCount,
+                });
+            }
+        } else {
+            std.log.err("Empty view configuration type", .{});
+        }
+
+        try LogEnvironmentBlendMode(allocator, viewConfigType);
+    }
+}
+
+pub fn InitializeDevice(allocator: std.mem.Allocator) !void {
+    try LogViewConfigurations(allocator);
+
+    // The graphics API can initialize the graphics device now that the systemId and instance
+    // handle are available.
+    graphicsplugin.InitializeDevice(m_instance, m_systemId);
+}
+
 // static void LogReferenceSpaces() {
 //     CHECK(m_session != XR_NULL_HANDLE);
 //
@@ -629,29 +630,32 @@ pub fn CreateInstance(allocator: std.mem.Allocator) !void {
 //         }
 //     }
 // }
-// void XR_PROG_InitializeSession() {
-//     CHECK(m_instance != XR_NULL_HANDLE);
-//     CHECK(m_session == XR_NULL_HANDLE);
-//
-//     {
-//         Log::Write(Log::Level::Verbose, Fmt("Creating session..."));
-//
-//         XrSessionCreateInfo createInfo{XR_TYPE_SESSION_CREATE_INFO};
-//         createInfo.next = XR_GFX_GetGraphicsBinding();
-//         createInfo.systemId = m_systemId;
-//         CHECK_XRCMD(xrCreateSession(m_instance, &createInfo, &m_session));
-//     }
-//
-//     LogReferenceSpaces();
-//     InitializeActions();
-//     CreateVisualizedSpaces();
-//
-//     {
-//         XrReferenceSpaceCreateInfo referenceSpaceCreateInfo = GetXrReferenceSpaceCreateInfo(m_options->AppSpace.c_str);
-//         CHECK_XRCMD(xrCreateReferenceSpace(m_session, &referenceSpaceCreateInfo, &m_appSpace));
-//     }
-// }
-//
+
+pub fn InitializeSession() void {
+    std.debug.assert(m_instance != null);
+    std.debug.assert(m_session == null);
+
+    {
+        std.log.debug("Creating session...", .{});
+
+        var createInfo: c.XrSessionCreateInfo = .{
+            .type = c.XR_TYPE_SESSION_CREATE_INFO,
+            .next = graphicsplugin.GetGraphicsBinding(),
+            .systemId = m_systemId,
+        };
+        CHECK_XRCMD(@src(), c.xrCreateSession(m_instance, &createInfo, &m_session));
+    }
+
+    //     LogReferenceSpaces();
+    //     InitializeActions();
+    //     CreateVisualizedSpaces();
+    //
+    //     {
+    //         XrReferenceSpaceCreateInfo referenceSpaceCreateInfo = GetXrReferenceSpaceCreateInfo(m_options->AppSpace.c_str);
+    //         CHECK_XRCMD(xrCreateReferenceSpace(m_session, &referenceSpaceCreateInfo, &m_appSpace));
+    //     }
+}
+
 // void XR_PROG_CreateSwapchains() {
 //     CHECK(m_session != XR_NULL_HANDLE);
 //     CHECK(m_swapchains.empty());

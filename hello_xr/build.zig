@@ -92,17 +92,6 @@ pub fn build(b: *std.Build) void {
     exe.addLibraryPath(openxr_loader.getInstallPrefix().path(b, "lib"));
     exe.linkSystemLibrary("openxr_loader");
 
-    const options = b.addLibrary(.{
-        .name = "Options",
-        .root_module = b.addModule("Options", .{
-            .root_source_file = b.path("Options.zig"),
-            .target = target,
-            .optimize = optimize,
-        }),
-    });
-    options.addIncludePath(openxr_dep.path("include"));
-    exe.linkLibrary(options);
-
     const glad = try build_glad(b, target, optimize, b.path("glad2"));
     exe.linkLibrary(glad);
 

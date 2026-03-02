@@ -1,11 +1,10 @@
-pub const c = @cImport({
-    @cInclude("openxr/openxr.h");
-    @cDefine("XR_USE_GRAPHICS_API_OPENGL", "1");
-    @cInclude("openxr/openxr_platform.h");
-});
+const std = @import("std");
+pub const c = @import("../c.zig").openxr;
+const xr_util = @import("../xr_util.zig");
+const CHECK_XRCMD = xr_util.CHECK_XRCMD;
 // #include "platform/xr_platform_include.h"
 // #include "common.h"
-// #include "geometry.h"
+const geometry = @import("../geometry.zig");
 // #include "graphicsplugin.h"
 // #include "options.h"
 //
@@ -16,44 +15,46 @@ pub const c = @cImport({
 // #include <vector>
 // #include <map>
 // #include <array>
-//
-// static const char* VertexShaderGlsl = R"_(
-//     #version 410
-//
-//     in vec3 VertexPos;
-//     in vec3 VertexColor;
-//
-//     out vec3 PSVertexColor;
-//
-//     uniform mat4 ModelViewProjection;
-//
-//     void main() {
-//        gl_Position = ModelViewProjection * vec4(VertexPos, 1.0);
-//        PSVertexColor = VertexColor;
-//     }
-//     )_";
-//
-// static const char* FragmentShaderGlsl = R"_(
-//     #version 410
-//
-//     in vec3 PSVertexColor;
-//     out vec4 FragColor;
-//
-//     void main() {
-//        FragColor = vec4(PSVertexColor, 1);
-//     }
-//     )_";
-//
+
+const VertexShaderGlsl: [*:0]const u8 =
+    \\#version 410
+    \\
+    \\in vec3 VertexPos;
+    \\in vec3 VertexColor;
+    \\
+    \\out vec3 PSVertexColor;
+    \\
+    \\uniform mat4 ModelViewProjection;
+    \\
+    \\void main() {
+    \\   gl_Position = ModelViewProjection * vec4(VertexPos, 1.0);
+    \\   PSVertexColor = VertexColor;
+    \\}
+    \\
+;
+
+const FragmentShaderGlsl: [*:0]const u8 =
+    \\#version 410
+    \\
+    \\in vec3 PSVertexColor;
+    \\out vec4 FragColor;
+    \\
+    \\void main() {
+    \\   FragColor = vec4(PSVertexColor, 1);
+    \\}
+    \\
+;
+
 // std::list<std::vector<XrSwapchainImageOpenGLKHR>> m_swapchainImageBuffers;
-// GLuint m_swapchainFramebuffer{0};
-// GLuint m_program{0};
-// GLint m_modelViewProjectionUniformLocation{0};
-// GLint m_vertexAttribCoords{0};
-// GLint m_vertexAttribColor{0};
-// GLuint m_vao{0};
-// GLuint m_cubeVertexBuffer{0};
-// GLuint m_cubeIndexBuffer{0};
-//
+var m_swapchainFramebuffer: c.GLuint = 0;
+var m_program: c.GLuint = 0;
+var m_modelViewProjectionUniformLocation: c.GLint = 0;
+var m_vertexAttribCoords: c.GLuint = 0;
+var m_vertexAttribColor: c.GLuint = 0;
+var m_vao: c.GLuint = 0;
+var m_cubeVertexBuffer: c.GLuint = 0;
+var m_cubeIndexBuffer: c.GLuint = 0;
+
 // // Map color buffer to associated depth buffer. This map is populated on demand.
 // std::map<uint32_t, uint32_t> m_colorToDepthMap;
 // std::array<float, 4> m_clearColor;
@@ -109,108 +110,119 @@ pub fn GetInstanceExtensions() []const [*:0]const u8 {
 // //     Log::Write(Log::Level::Info, "GL Debug: " + std::string(message, 0, length));
 // // }
 // // #endif  // !defined(XR_USE_PLATFORM_MACOS)
-//
-// static void CheckShader(GLuint shader) {
-//     GLint r = 0;
-//     glGetShaderiv(shader, GL_COMPILE_STATUS, &r);
-//     if (r == GL_FALSE) {
-//         GLchar msg[4096] = {};
-//         GLsizei length;
-//         glGetShaderInfoLog(shader, sizeof(msg), &length, msg);
-//         THROW(Fmt("Compile shader failed: %s", msg));
-//     }
-// }
-//
-// static void CheckProgram(GLuint prog) {
-//     GLint r = 0;
-//     glGetProgramiv(prog, GL_LINK_STATUS, &r);
-//     if (r == GL_FALSE) {
-//         GLchar msg[4096] = {};
-//         GLsizei length;
-//         glGetProgramInfoLog(prog, sizeof(msg), &length, msg);
-//         THROW(Fmt("Link program failed: %s", msg));
-//     }
-// }
-//
-// static void InitializeResources() {
-//     glGenFramebuffers(1, &m_swapchainFramebuffer);
-//
-//     GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
-//     glShaderSource(vertexShader, 1, &VertexShaderGlsl, nullptr);
-//     glCompileShader(vertexShader);
-//     CheckShader(vertexShader);
-//
-//     GLuint fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
-//     glShaderSource(fragmentShader, 1, &FragmentShaderGlsl, nullptr);
-//     glCompileShader(fragmentShader);
-//     CheckShader(fragmentShader);
-//
-//     m_program = glCreateProgram();
-//     glAttachShader(m_program, vertexShader);
-//     glAttachShader(m_program, fragmentShader);
-//     glLinkProgram(m_program);
-//     CheckProgram(m_program);
-//
-//     glDeleteShader(vertexShader);
-//     glDeleteShader(fragmentShader);
-//
-//     m_modelViewProjectionUniformLocation = glGetUniformLocation(m_program, "ModelViewProjection");
-//
-//     m_vertexAttribCoords = glGetAttribLocation(m_program, "VertexPos");
-//     m_vertexAttribColor = glGetAttribLocation(m_program, "VertexColor");
-//
-//     glGenBuffers(1, &m_cubeVertexBuffer);
-//     glBindBuffer(GL_ARRAY_BUFFER, m_cubeVertexBuffer);
-//     glBufferData(GL_ARRAY_BUFFER, sizeof(Geometry::c_cubeVertices), Geometry::c_cubeVertices, GL_STATIC_DRAW);
-//
-//     glGenBuffers(1, &m_cubeIndexBuffer);
-//     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_cubeIndexBuffer);
-//     glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(Geometry::c_cubeIndices), Geometry::c_cubeIndices, GL_STATIC_DRAW);
-//
-//     glGenVertexArrays(1, &m_vao);
-//     glBindVertexArray(m_vao);
-//     glEnableVertexAttribArray(m_vertexAttribCoords);
-//     glEnableVertexAttribArray(m_vertexAttribColor);
-//     glBindBuffer(GL_ARRAY_BUFFER, m_cubeVertexBuffer);
-//     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_cubeIndexBuffer);
-//     glVertexAttribPointer(m_vertexAttribCoords, 3, GL_FLOAT, GL_FALSE, sizeof(Geometry::Vertex), nullptr);
-//     glVertexAttribPointer(m_vertexAttribColor, 3, GL_FLOAT, GL_FALSE, sizeof(Geometry::Vertex),
-//                           reinterpret_cast<const void*>(sizeof(XrVector3f)));
-// }
-// void XR_GFX_InitializeDevice(XrInstance instance, XrSystemId systemId) {
-//     // Extension function must be loaded by name
-//     PFN_xrGetOpenGLGraphicsRequirementsKHR pfnGetOpenGLGraphicsRequirementsKHR = nullptr;
-//     CHECK_XRCMD(xrGetInstanceProcAddr(instance, "xrGetOpenGLGraphicsRequirementsKHR",
-//                                       reinterpret_cast<PFN_xrVoidFunction*>(&pfnGetOpenGLGraphicsRequirementsKHR)));
-//
-//     XrGraphicsRequirementsOpenGLKHR graphicsRequirements{XR_TYPE_GRAPHICS_REQUIREMENTS_OPENGL_KHR};
-//     CHECK_XRCMD(pfnGetOpenGLGraphicsRequirementsKHR(instance, systemId, &graphicsRequirements));
-//
-//     gfxwrapper_opengl_init();
-//
-//     GLint major = 0;
-//     GLint minor = 0;
-//     glGetIntegerv(GL_MAJOR_VERSION, &major);
-//     glGetIntegerv(GL_MINOR_VERSION, &minor);
-//
-//     const XrVersion desiredApiVersion = XR_MAKE_VERSION(major, minor, 0);
-//     if (graphicsRequirements.minApiVersionSupported > desiredApiVersion) {
-//         THROW("Runtime does not support desired Graphics API and/or version");
-//     }
-//
-//     // #if !defined(XR_USE_PLATFORM_MACOS)
-//     //     glEnable(GL_DEBUG_OUTPUT);
-//     //     glDebugMessageCallback(
-//     //         [](GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar* message, const void*
-//     //         userParam) {
-//     //             ((OpenGLGraphicsPlugin*)userParam)->DebugMessageCallback(source, type, id, severity, length, message);
-//     //         },
-//     //         this);
-//     // #endif  // !defined(XR_USE_PLATFORM_MACOS)
-//
-//     InitializeResources();
-// }
-//
+
+fn CheckShader(shader: c.GLuint) void {
+    var r: c.GLint = 0;
+    c.glGetShaderiv(shader, c.GL_COMPILE_STATUS, &r);
+    if (r == c.GL_FALSE) {
+        var msg: [4096]u8 = undefined;
+        var length: c.GLsizei = undefined;
+        c.glGetShaderInfoLog(shader, msg.len, &length, &msg);
+        std.log.err("{s}", .{std.mem.sliceTo(&msg, 0)});
+        @panic("Compile shader failed");
+    }
+}
+
+fn CheckProgram(prog: c.GLuint) void {
+    var r: c.GLint = 0;
+    c.glGetProgramiv(prog, c.GL_LINK_STATUS, &r);
+    if (r == c.GL_FALSE) {
+        var msg: [4096]u8 = undefined;
+        var length: c.GLsizei = undefined;
+        c.glGetProgramInfoLog(prog, msg.len, &length, &msg);
+        std.log.err("{s}", .{std.mem.sliceTo(&msg, 0)});
+        @panic("Link program failed");
+    }
+}
+
+fn InitializeResources() void {
+    c.glGenFramebuffers(1, &m_swapchainFramebuffer);
+
+    const vertexShader = c.glCreateShader(c.GL_VERTEX_SHADER);
+    c.glShaderSource(vertexShader, 1, &VertexShaderGlsl, null);
+    c.glCompileShader(vertexShader);
+    CheckShader(vertexShader);
+
+    const fragmentShader = c.glCreateShader(c.GL_FRAGMENT_SHADER);
+    c.glShaderSource(fragmentShader, 1, &FragmentShaderGlsl, null);
+    c.glCompileShader(fragmentShader);
+    CheckShader(fragmentShader);
+
+    m_program = c.glCreateProgram();
+    c.glAttachShader(m_program, vertexShader);
+    c.glAttachShader(m_program, fragmentShader);
+    c.glLinkProgram(m_program);
+    CheckProgram(m_program);
+
+    c.glDeleteShader(vertexShader);
+    c.glDeleteShader(fragmentShader);
+
+    m_modelViewProjectionUniformLocation = c.glGetUniformLocation(m_program, "ModelViewProjection");
+
+    m_vertexAttribCoords = @intCast(c.glGetAttribLocation(m_program, "VertexPos"));
+    m_vertexAttribColor = @intCast(c.glGetAttribLocation(m_program, "VertexColor"));
+
+    c.glGenBuffers(1, &m_cubeVertexBuffer);
+    c.glBindBuffer(c.GL_ARRAY_BUFFER, m_cubeVertexBuffer);
+    c.glBufferData(
+        c.GL_ARRAY_BUFFER,
+        @sizeOf(@TypeOf(geometry.c_cubeVertices)),
+        &geometry.c_cubeVertices,
+        c.GL_STATIC_DRAW,
+    );
+
+    c.glGenBuffers(1, &m_cubeIndexBuffer);
+    c.glBindBuffer(c.GL_ELEMENT_ARRAY_BUFFER, m_cubeIndexBuffer);
+    c.glBufferData(
+        c.GL_ELEMENT_ARRAY_BUFFER,
+        @sizeOf(@TypeOf(geometry.c_cubeIndices)),
+        &geometry.c_cubeIndices,
+        c.GL_STATIC_DRAW,
+    );
+
+    c.glGenVertexArrays(1, &m_vao);
+    c.glBindVertexArray(m_vao);
+    c.glEnableVertexAttribArray(m_vertexAttribCoords);
+    c.glEnableVertexAttribArray(m_vertexAttribColor);
+    c.glBindBuffer(c.GL_ARRAY_BUFFER, m_cubeVertexBuffer);
+    c.glBindBuffer(c.GL_ELEMENT_ARRAY_BUFFER, m_cubeIndexBuffer);
+    c.glVertexAttribPointer(m_vertexAttribCoords, 3, c.GL_FLOAT, c.GL_FALSE, @sizeOf(@TypeOf(geometry.Vertex)), null);
+    c.glVertexAttribPointer(m_vertexAttribColor, 3, c.GL_FLOAT, c.GL_FALSE, @sizeOf(@TypeOf(geometry.Vertex)), @ptrFromInt(@sizeOf(c.XrVector3f)));
+}
+
+pub fn InitializeDevice(instance: c.XrInstance, systemId: c.XrSystemId) void {
+    // Extension function must be loaded by name
+    var pfnGetOpenGLGraphicsRequirementsKHR: c.PFN_xrGetOpenGLGraphicsRequirementsKHR = undefined;
+    CHECK_XRCMD(@src(), c.xrGetInstanceProcAddr(instance, "xrGetOpenGLGraphicsRequirementsKHR", &pfnGetOpenGLGraphicsRequirementsKHR));
+
+    var graphicsRequirements: c.XrGraphicsRequirementsOpenGLKHR = .{ .type = c.XR_TYPE_GRAPHICS_REQUIREMENTS_OPENGL_KHR };
+    CHECK_XRCMD(@src(), (pfnGetOpenGLGraphicsRequirementsKHR.?)(instance, systemId, &graphicsRequirements));
+
+    c.gfxwrapper_opengl_init();
+
+    var major: c.GLint = 0;
+    c.glGetIntegerv(c.GL_MAJOR_VERSION, &major);
+    var minor: c.GLint = 0;
+    c.glGetIntegerv(c.GL_MINOR_VERSION, &minor);
+
+    const desiredApiVersion = c.XR_MAKE_VERSION(@as(i64, @intCast(major)), @as(i64, @intCast(minor)), 0);
+    if (graphicsRequirements.minApiVersionSupported > desiredApiVersion) {
+        @panic("Runtime does not support desired Graphics API and/or version");
+    }
+
+    //     // #if !defined(XR_USE_PLATFORM_MACOS)
+    //     //     glEnable(GL_DEBUG_OUTPUT);
+    //     //     glDebugMessageCallback(
+    //     //         [](GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar* message, const void*
+    //     //         userParam) {
+    //     //             ((OpenGLGraphicsPlugin*)userParam)->DebugMessageCallback(source, type, id, severity, length, message);
+    //     //         },
+    //     //         this);
+    //     // #endif  // !defined(XR_USE_PLATFORM_MACOS)
+
+    InitializeResources();
+}
+
 // int64_t XR_GFX_SelectColorSwapchainFormat(const int64_t* runtimeFormats, size_t len) {
 //     // List of supported color swapchain formats.
 //     constexpr int64_t SupportedColorSwapchainFormats[] = {
@@ -231,11 +243,11 @@ pub fn GetInstanceExtensions() []const [*:0]const u8 {
 //
 //     return *swapchainFormatIt;
 // }
-//
-// const XrBaseInStructure* XR_GFX_GetGraphicsBinding() {
-//     return reinterpret_cast<const XrBaseInStructure*>(gfxwrapper_opengl_binding());
-// }
-//
+
+pub fn GetGraphicsBinding() *c.XrBaseInStructure {
+    return @ptrCast(@alignCast(c.gfxwrapper_opengl_binding()));
+}
+
 // void XR_GFX_AllocateSwapchainImageStructs(uint32_t capacity, const XrSwapchainCreateInfo& /*swapchainCreateInfo*/,
 //                                           XrSwapchainImageBaseHeader** swapchainImageBase) {
 //     // Allocate and initialize the buffer of image structs (must be sequential in memory for xrEnumerateSwapchainImages).

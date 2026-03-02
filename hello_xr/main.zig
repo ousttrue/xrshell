@@ -50,15 +50,14 @@ pub fn main() !void {
         OpenXrProgram.init(&options);
 
         try OpenXrProgram.CreateInstance(allocator);
-        //             XR_PROG_InitializeSystem();
-        //
-        //             SetEnvironmentBlendMode(&options, XR_PROG_GetPreferredBlendMode());
-        //             UpdateOptionsFromCommandLine(&options, argc, argv);
-        //
-        //             XR_PROG_InitializeDevice();
-        //             XR_PROG_InitializeSession();
+        OpenXrProgram.InitializeSystem();
+
+        options.SetEnvironmentBlendMode(try OpenXrProgram.GetPreferredBlendMode(allocator));
+
+        try OpenXrProgram.InitializeDevice(allocator);
+                    OpenXrProgram.InitializeSession();
         //             XR_PROG_CreateSwapchains();
-        //
+
         //             while (!quitKeyPressed) {
         //                 bool exitRenderLoop = false;
         //                 XR_PROG_PollEvents(&exitRenderLoop, &requestRestart);
