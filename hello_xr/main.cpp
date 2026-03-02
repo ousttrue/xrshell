@@ -23,11 +23,11 @@ __declspec(dllexport) DWORD AmdPowerXpressRequestHighPerformance = 0x00000001;
 #endif  // defined(_WIN32)
 
 int main(int argc, char* argv[]) {
+    Options options = {};
     try {
         // Parse command-line arguments into Options.
-        auto options = std::make_shared<Options>();
         // memset(options.get(), 0, sizeof(Options));
-        if (!UpdateOptionsFromCommandLine(options.get(), argc, argv)) {
+        if (!UpdateOptionsFromCommandLine(&options, argc, argv)) {
             return 1;
         }
 
@@ -44,19 +44,16 @@ int main(int argc, char* argv[]) {
 
         bool requestRestart = false;
         do {
-            // Create graphics API implementation.
-            std::shared_ptr<IGraphicsPlugin> graphicsPlugin = CreateGraphicsPlugin(options);
-
             // Initialize the OpenXR program.
-            OpenXrProgram program(*options, graphicsPlugin.get());
+            OpenXrProgram program(options);
 
             program.CreateInstance();
             program.InitializeSystem();
 
-            SetEnvironmentBlendMode(options.get(), program.GetPreferredBlendMode());
-            UpdateOptionsFromCommandLine(options.get(), argc, argv);
-            XR_PLATFORM_UpdateOptions(options.get());
-            graphicsPlugin->UpdateOptions(options);
+            SetEnvironmentBlendMode(&options, program.GetPreferredBlendMode());
+            UpdateOptionsFromCommandLine(&options, argc, argv);
+            XR_PLATFORM_UpdateOptions(&options);
+            XR_GFX_UpdateOptions(&options);
 
             program.InitializeDevice();
             program.InitializeSession();

@@ -79,9 +79,8 @@ inline XrReferenceSpaceCreateInfo GetXrReferenceSpaceCreateInfo(const char* refe
     return referenceSpaceCreateInfo;
 }
 
-OpenXrProgram::OpenXrProgram(const Options& options, IGraphicsPlugin* graphicsPlugin)
+OpenXrProgram::OpenXrProgram(const Options& options)
     : m_options(options),
-      m_graphicsPlugin(graphicsPlugin),
       m_acceptableBlendModes{XR_ENVIRONMENT_BLEND_MODE_OPAQUE, XR_ENVIRONMENT_BLEND_MODE_ADDITIVE,
                              XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND} {}
 
@@ -169,14 +168,23 @@ void OpenXrProgram::CreateInstanceInternal() {
 
     // Transform platform and graphics extension std::strings to C strings.
     std::vector<const char*> platformExtensions;
-    size_t n;
-    auto p = XR_PLATFORM_GetInstanceExtensions(&n);
-    if (p && n) {
-        platformExtensions.assign(p, p + n);
+    {
+        size_t n;
+        auto p = XR_PLATFORM_GetInstanceExtensions(&n);
+        if (p && n) {
+            platformExtensions.assign(p, p + n);
+        }
     }
     std::transform(platformExtensions.begin(), platformExtensions.end(), std::back_inserter(extensions),
                    [](const std::string& ext) { return ext.c_str(); });
-    const std::vector<std::string> graphicsExtensions = m_graphicsPlugin->GetInstanceExtensions();
+    std::vector<const char*> graphicsExtensions;
+    {
+        size_t n = 0;
+        auto p = XR_GFX_GetInstanceExtensions(&n);
+        if (n && p) {
+            graphicsExtensions.assign(p, p + n);
+        }
+    }
     std::transform(graphicsExtensions.begin(), graphicsExtensions.end(), std::back_inserter(extensions),
                    [](const std::string& ext) { return ext.c_str(); });
 
@@ -301,7 +309,7 @@ void OpenXrProgram::InitializeDevice() {
 
     // The graphics API can initialize the graphics device now that the systemId and instance
     // handle are available.
-    m_graphicsPlugin->InitializeDevice(m_instance, m_systemId);
+    XR_GFX_InitializeDevice(m_instance, m_systemId);
 }
 
 void OpenXrProgram::LogReferenceSpaces() {
@@ -533,7 +541,7 @@ void OpenXrProgram::InitializeSession() {
         Log::Write(Log::Level::Verbose, Fmt("Creating session..."));
 
         XrSessionCreateInfo createInfo{XR_TYPE_SESSION_CREATE_INFO};
-        createInfo.next = m_graphicsPlugin->GetGraphicsBinding();
+        createInfo.next = XR_GFX_GetGraphicsBinding();
         createInfo.systemId = m_systemId;
         CHECK_XRCMD(xrCreateSession(m_instance, &createInfo, &m_session));
     }
@@ -592,7 +600,7 @@ void OpenXrProgram::CreateSwapchains() {
         CHECK_XRCMD(xrEnumerateSwapchainFormats(m_session, (uint32_t)swapchainFormats.size(), &swapchainFormatCount,
                                                 swapchainFormats.data()));
         CHECK(swapchainFormatCount == swapchainFormats.size());
-        m_colorSwapchainFormat = m_graphicsPlugin->SelectColorSwapchainFormat(swapchainFormats);
+        m_colorSwapchainFormat = XR_GFX_SelectColorSwapchainFormat(swapchainFormats.data(), swapchainFormats.size());
 
         // Print swapchain formats and the selected one.
         {
@@ -626,7 +634,7 @@ void OpenXrProgram::CreateSwapchains() {
             swapchainCreateInfo.height = vp.recommendedImageRectHeight;
             swapchainCreateInfo.mipCount = 1;
             swapchainCreateInfo.faceCount = 1;
-            swapchainCreateInfo.sampleCount = m_graphicsPlugin->GetSupportedSwapchainSampleCount(vp);
+            swapchainCreateInfo.sampleCount = XR_GFX_GetSupportedSwapchainSampleCount(&vp);
             swapchainCreateInfo.usageFlags = XR_SWAPCHAIN_USAGE_SAMPLED_BIT | XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT;
             Swapchain swapchain;
             swapchain.width = swapchainCreateInfo.width;
@@ -638,8 +646,8 @@ void OpenXrProgram::CreateSwapchains() {
             uint32_t imageCount;
             CHECK_XRCMD(xrEnumerateSwapchainImages(swapchain.handle, 0, &imageCount, nullptr));
             // XXX This should really just return XrSwapchainImageBaseHeader*
-            std::vector<XrSwapchainImageBaseHeader*> swapchainImages =
-                m_graphicsPlugin->AllocateSwapchainImageStructs(imageCount, swapchainCreateInfo);
+            std::vector<XrSwapchainImageBaseHeader*> swapchainImages(imageCount);
+            XR_GFX_AllocateSwapchainImageStructs(imageCount, swapchainCreateInfo, swapchainImages.data());
             CHECK_XRCMD(xrEnumerateSwapchainImages(swapchain.handle, imageCount, &imageCount, swapchainImages[0]));
 
             m_swapchainImages.insert(std::make_pair(swapchain.handle, std::move(swapchainImages)));
@@ -950,7 +958,7 @@ bool OpenXrProgram::RenderLayer(XrTime predictedDisplayTime, std::vector<XrCompo
         projectionLayerViews[i].subImage.imageRect.extent = {viewSwapchain.width, viewSwapchain.height};
 
         const XrSwapchainImageBaseHeader* const swapchainImage = m_swapchainImages[viewSwapchain.handle][swapchainImageIndex];
-        m_graphicsPlugin->RenderView(projectionLayerViews[i], swapchainImage, m_colorSwapchainFormat, cubes);
+        XR_GFX_RenderView(&projectionLayerViews[i], swapchainImage, m_colorSwapchainFormat, cubes.data(), cubes.size());
 
         XrSwapchainImageReleaseInfo releaseInfo{XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};
         CHECK_XRCMD(xrReleaseSwapchainImage(viewSwapchain.handle, &releaseInfo));

@@ -30,7 +30,7 @@ const XR_SRCS = [_][]const u8{
     // "graphicsplugin_opengles.cpp",
     // "graphicsplugin_vulkan.cpp",
     // "graphicsplugin_metal.cpp",
-    "gfx/graphicsplugin_factory.cpp",
+    // "gfx/graphicsplugin_factory.cpp",
 
     "logger.cpp",
     "main.cpp",

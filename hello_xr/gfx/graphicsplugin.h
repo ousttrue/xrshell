@@ -1,50 +1,48 @@
-// Copyright (c) 2017-2025 The Khronos Group Inc.
-//
-// SPDX-License-Identifier: Apache-2.0
-
 #pragma once
-#include <vector>
-#include <string>
+#include <openxr/openxr.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct Cube {
     XrPosef Pose;
     XrVector3f Scale;
 };
 
-// Wraps a graphics API so the main openxr program can be graphics API-independent.
-struct IGraphicsPlugin {
-    virtual ~IGraphicsPlugin() = default;
+void XR_GFX_init();
+void XR_GFX_deinit();
 
-    // OpenXR extensions required by this graphics API.
-    virtual std::vector<std::string> GetInstanceExtensions() const = 0;
+// OpenXR extensions required by this graphics API.
+const char** XR_GFX_GetInstanceExtensions(size_t* n);
 
-    // Create an instance of this graphics api for the provided instance and systemId.
-    virtual void InitializeDevice(XrInstance instance, XrSystemId systemId) = 0;
+// Create an instance of this graphics api for the provided instance and systemId.
+void XR_GFX_InitializeDevice(XrInstance instance, XrSystemId systemId);
 
-    // Select the preferred swapchain format from the list of available formats.
-    virtual int64_t SelectColorSwapchainFormat(const std::vector<int64_t>& runtimeFormats) const = 0;
+// Select the preferred swapchain format from the list of available formats.
+int64_t XR_GFX_SelectColorSwapchainFormat(const int64_t* runtimeFormats, size_t n);
 
-    // Get the graphics binding header for session creation.
-    virtual const XrBaseInStructure* GetGraphicsBinding() const = 0;
+// Get the graphics binding header for session creation.
+const XrBaseInStructure* XR_GFX_GetGraphicsBinding();
 
-    // Allocate space for the swapchain image structures. These are different for each graphics API. The returned
-    // pointers are valid for the lifetime of the graphics plugin.
-    virtual std::vector<XrSwapchainImageBaseHeader*> AllocateSwapchainImageStructs(
-        uint32_t capacity, const XrSwapchainCreateInfo& swapchainCreateInfo) = 0;
+// Allocate space for the swapchain image structures. These are different for each graphics API. The returned
+// pointers are valid for the lifetime of the graphics plugin.
+void XR_GFX_AllocateSwapchainImageStructs(uint32_t capacity, const XrSwapchainCreateInfo& swapchainCreateInfo,
+                                          XrSwapchainImageBaseHeader** out);
 
-    // Render to a swapchain image for a projection view.
-    virtual void RenderView(const XrCompositionLayerProjectionView& layerView, const XrSwapchainImageBaseHeader* swapchainImage,
-                            int64_t swapchainFormat, const std::vector<Cube>& cubes) = 0;
+// Render to a swapchain image for a projection view.
+void XR_GFX_RenderView(const XrCompositionLayerProjectionView* layerView, const XrSwapchainImageBaseHeader* swapchainImage,
+                       int64_t swapchainFormat, const Cube* cubes, size_t cubeCount);
 
-    // Get recommended number of sub-data element samples in view (recommendedSwapchainSampleCount)
-    // if supported by the graphics plugin. A supported value otherwise.
-    virtual uint32_t GetSupportedSwapchainSampleCount(const XrViewConfigurationView& view) {
-        return view.recommendedSwapchainSampleCount;
-    }
+// Get recommended number of sub-data element samples in view (recommendedSwapchainSampleCount)
+// if supported by the graphics plugin. A supported value otherwise.
+uint32_t XR_GFX_GetSupportedSwapchainSampleCount(const XrViewConfigurationView* view);
+//     return view.recommendedSwapchainSampleCount;
+// }
 
-    // Perform required steps after updating Options
-    virtual void UpdateOptions(const std::shared_ptr<struct Options>& options) = 0;
-};
+// Perform required steps after updating Options
+void XR_GFX_UpdateOptions(const struct Options* options);
 
-// Create a graphics plugin for the graphics API specified in the options.
-std::shared_ptr<IGraphicsPlugin> CreateGraphicsPlugin(const std::shared_ptr<struct Options>& options);
+#ifdef __cplusplus
+}
+#endif
