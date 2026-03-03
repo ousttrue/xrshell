@@ -2,6 +2,8 @@ const std = @import("std");
 const xr_util = @import("../xr_util.zig");
 const CHECK_XRCMD = xr_util.CHECK_XRCMD;
 const geometry = @import("../geometry.zig");
+const Cube = @import("../Cube.zig");
+const Options = @import("../Options.zig");
 
 const gfxwrapper_opengl = @import("gfxwrapper_opengl_wayland.zig");
 const c = gfxwrapper_opengl.c;
@@ -18,8 +20,8 @@ var m_cubeIndexBuffer: c.GLuint = 0;
 var m_contextApiMajorVersion: c.GLint = 0;
 
 // Map color buffer to associated depth buffer. This map is populated on demand.
-//     std::map<uint32_t, uint32_t> m_colorToDepthMap;
-//     std::array<float, 4> m_clearColor;
+var m_colorToDepthMap: std.AutoHashMap(u32, u32) = undefined;
+var m_clearColor: [4]f32 = undefined;
 
 const extensions = [_][*:0]const u8{
     c.XR_KHR_OPENGL_ES_ENABLE_EXTENSION_NAME,
@@ -72,17 +74,13 @@ const FragmentShaderGlsl: [*:0]const u8 =
     \\
 ;
 
-// struct OpenGLESGraphicsPlugin : public IGraphicsPlugin {
-//     OpenGLESGraphicsPlugin(const std::shared_ptr<Options>& options, const std::shared_ptr<IPlatformPlugin> /*unused*/&)
-//         : m_clearColor(options->GetBackgroundClearColor()) {}
-//
-//     OpenGLESGraphicsPlugin(const OpenGLESGraphicsPlugin&) = delete;
-//     OpenGLESGraphicsPlugin& operator=(const OpenGLESGraphicsPlugin&) = delete;
-//     OpenGLESGraphicsPlugin(OpenGLESGraphicsPlugin&&) = delete;
-//     OpenGLESGraphicsPlugin& operator=(OpenGLESGraphicsPlugin&&) = delete;
-//
+pub fn init(allocator: std.mem.Allocator, options: *Options) void {
+    m_colorToDepthMap = .init(allocator);
+    m_clearColor = options.GetBackgroundClearColor();
+}
 
 pub fn deinit(allocator: std.mem.Allocator) void {
+    m_colorToDepthMap.deinit();
     for (m_swapchainImageBuffers.items) |item| {
         allocator.free(item);
     }
@@ -271,97 +269,102 @@ pub fn AllocateSwapchainImageStructs(
     try m_swapchainImageBuffers.append(allocator, swapchainImageBuffer);
 }
 
-//     uint32_t GetDepthTexture(uint32_t colorTexture) {
-//         // If a depth-stencil view has already been created for this back-buffer, use it.
-//         auto depthBufferIt = m_colorToDepthMap.find(colorTexture);
-//         if (depthBufferIt != m_colorToDepthMap.end()) {
-//             return depthBufferIt->second;
-//         }
-//
-//         // This back-buffer has no corresponding depth-stencil texture, so create one with matching dimensions.
-//
-//         GLint width;
-//         GLint height;
-//         glBindTexture(GL_TEXTURE_2D, colorTexture);
-//         glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH, &width);
-//         glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_HEIGHT, &height);
-//
-//         uint32_t depthTexture;
-//         glGenTextures(1, &depthTexture);
-//         glBindTexture(GL_TEXTURE_2D, depthTexture);
-//         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-//         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-//         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-//         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-//         glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, width, height, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, nullptr);
-//
-//         m_colorToDepthMap.insert(std::make_pair(colorTexture, depthTexture));
-//
-//         return depthTexture;
-//     }
-//
-//     void RenderView(const XrCompositionLayerProjectionView& layerView, const XrSwapchainImageBaseHeader* swapchainImage,
-//                     int64_t swapchainFormat, const std::vector<Cube>& cubes) override {
-//         CHECK(layerView.subImage.imageArrayIndex == 0);  // Texture arrays not supported.
-//         UNUSED_PARM(swapchainFormat);                    // Not used in this function for now.
-//
-//         glBindFramebuffer(GL_FRAMEBUFFER, m_swapchainFramebuffer);
-//
-//         const uint32_t colorTexture = reinterpret_cast<const XrSwapchainImageOpenGLESKHR*>(swapchainImage)->image;
-//
-//         glViewport(static_cast<GLint>(layerView.subImage.imageRect.offset.x),
-//                    static_cast<GLint>(layerView.subImage.imageRect.offset.y),
-//                    static_cast<GLsizei>(layerView.subImage.imageRect.extent.width),
-//                    static_cast<GLsizei>(layerView.subImage.imageRect.extent.height));
-//
-//         glFrontFace(GL_CW);
-//         glCullFace(GL_BACK);
-//         glEnable(GL_CULL_FACE);
-//         glEnable(GL_DEPTH_TEST);
-//
-//         const uint32_t depthTexture = GetDepthTexture(colorTexture);
-//
-//         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, colorTexture, 0);
-//         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depthTexture, 0);
-//
-//         // Clear swapchain and depth buffer.
-//         glClearColor(m_clearColor[0], m_clearColor[1], m_clearColor[2], m_clearColor[3]);
-//         glClearDepthf(1.0f);
-//         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
-//
-//         // Set shaders and uniform variables.
-//         glUseProgram(m_program);
-//
-//         const auto& pose = layerView.pose;
-//         XrMatrix4x4f proj;
-//         XrMatrix4x4f_CreateProjectionFov(&proj, GRAPHICS_OPENGL_ES, layerView.fov, 0.05f, 100.0f);
-//         XrMatrix4x4f toView;
-//         XrMatrix4x4f_CreateFromRigidTransform(&toView, &pose);
-//         XrMatrix4x4f view;
-//         XrMatrix4x4f_InvertRigidBody(&view, &toView);
-//         XrMatrix4x4f vp;
-//         XrMatrix4x4f_Multiply(&vp, &proj, &view);
-//
-//         // Set cube primitive data.
-//         glBindVertexArray(m_vao);
-//
-//         // Render each cube
-//         for (const Cube& cube : cubes) {
-//             // Compute the model-view-projection transform and set it..
-//             XrMatrix4x4f model;
-//             XrMatrix4x4f_CreateTranslationRotationScale(&model, &cube.Pose.position, &cube.Pose.orientation, &cube.Scale);
-//             XrMatrix4x4f mvp;
-//             XrMatrix4x4f_Multiply(&mvp, &vp, &model);
-//             glUniformMatrix4fv(m_modelViewProjectionUniformLocation, 1, GL_FALSE, reinterpret_cast<const GLfloat*>(&mvp));
-//
-//             // Draw the cube.
-//             glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(ArraySize(Geometry::c_cubeIndices)), GL_UNSIGNED_SHORT, nullptr);
-//         }
-//
-//         glBindVertexArray(0);
-//         glUseProgram(0);
-//         glBindFramebuffer(GL_FRAMEBUFFER, 0);
-//     }
+fn GetDepthTexture(colorTexture: u32) !u32 {
+    // If a depth-stencil view has already been created for this back-buffer, use it.
+    if (m_colorToDepthMap.get(colorTexture)) |found| {
+        return found;
+    }
+
+    // This back-buffer has no corresponding depth-stencil texture, so create one with matching dimensions.
+    c.glBindTexture(c.GL_TEXTURE_2D, colorTexture);
+    var width: c.GLint = undefined;
+    c.glGetTexLevelParameteriv(c.GL_TEXTURE_2D, 0, c.GL_TEXTURE_WIDTH, &width);
+    var height: c.GLint = undefined;
+    c.glGetTexLevelParameteriv(c.GL_TEXTURE_2D, 0, c.GL_TEXTURE_HEIGHT, &height);
+
+    var depthTexture: u32 = undefined;
+    c.glGenTextures(1, &depthTexture);
+    c.glBindTexture(c.GL_TEXTURE_2D, depthTexture);
+    c.glTexParameteri(c.GL_TEXTURE_2D, c.GL_TEXTURE_MAG_FILTER, c.GL_NEAREST);
+    c.glTexParameteri(c.GL_TEXTURE_2D, c.GL_TEXTURE_MIN_FILTER, c.GL_NEAREST);
+    c.glTexParameteri(c.GL_TEXTURE_2D, c.GL_TEXTURE_WRAP_S, c.GL_CLAMP_TO_EDGE);
+    c.glTexParameteri(c.GL_TEXTURE_2D, c.GL_TEXTURE_WRAP_T, c.GL_CLAMP_TO_EDGE);
+    c.glTexImage2D(c.GL_TEXTURE_2D, 0, c.GL_DEPTH_COMPONENT24, width, height, 0, c.GL_DEPTH_COMPONENT, c.GL_UNSIGNED_INT, null);
+
+    try m_colorToDepthMap.put(colorTexture, depthTexture);
+
+    return depthTexture;
+}
+
+pub fn RenderView(
+    layerView: *c.XrCompositionLayerProjectionView,
+    _swapchainImage: *c.XrSwapchainImageBaseHeader,
+    swapchainFormat: i64,
+    cubes: []Cube,
+) !void {
+    const swapchainImage: *c.XrSwapchainImageOpenGLESKHR = @ptrCast(_swapchainImage);
+    _ = swapchainFormat;
+    _ = cubes;
+    std.debug.assert(layerView.subImage.imageArrayIndex == 0); // Texture arrays not supported.
+
+    c.glBindFramebuffer(c.GL_FRAMEBUFFER, m_swapchainFramebuffer);
+
+    c.glViewport(
+        layerView.subImage.imageRect.offset.x,
+        layerView.subImage.imageRect.offset.y,
+        layerView.subImage.imageRect.extent.width,
+        layerView.subImage.imageRect.extent.height,
+    );
+
+    c.glFrontFace(c.GL_CW);
+    c.glCullFace(c.GL_BACK);
+    c.glEnable(c.GL_CULL_FACE);
+    c.glEnable(c.GL_DEPTH_TEST);
+
+    const colorTexture = swapchainImage.image;
+    const depthTexture = try GetDepthTexture(colorTexture);
+
+    c.glFramebufferTexture2D(c.GL_FRAMEBUFFER, c.GL_COLOR_ATTACHMENT0, c.GL_TEXTURE_2D, colorTexture, 0);
+    c.glFramebufferTexture2D(c.GL_FRAMEBUFFER, c.GL_DEPTH_ATTACHMENT, c.GL_TEXTURE_2D, depthTexture, 0);
+
+    // Clear swapchain and depth buffer.
+    c.glClearColor(m_clearColor[0], m_clearColor[1], m_clearColor[2], m_clearColor[3]);
+    c.glClearDepthf(1.0);
+    c.glClear(c.GL_COLOR_BUFFER_BIT | c.GL_DEPTH_BUFFER_BIT | c.GL_STENCIL_BUFFER_BIT);
+
+    // Set shaders and uniform variables.
+    c.glUseProgram(m_program);
+
+    //         const auto& pose = layerView.pose;
+    //         XrMatrix4x4f proj;
+    //         XrMatrix4x4f_CreateProjectionFov(&proj, GRAPHICS_OPENGL_ES, layerView.fov, 0.05f, 100.0f);
+    //         XrMatrix4x4f toView;
+    //         XrMatrix4x4f_CreateFromRigidTransform(&toView, &pose);
+    //         XrMatrix4x4f view;
+    //         XrMatrix4x4f_InvertRigidBody(&view, &toView);
+    //         XrMatrix4x4f vp;
+    //         XrMatrix4x4f_Multiply(&vp, &proj, &view);
+    //
+    //         // Set cube primitive data.
+    //         glBindVertexArray(m_vao);
+    //
+    //         // Render each cube
+    //         for (const Cube& cube : cubes) {
+    //             // Compute the model-view-projection transform and set it..
+    //             XrMatrix4x4f model;
+    //             XrMatrix4x4f_CreateTranslationRotationScale(&model, &cube.Pose.position, &cube.Pose.orientation, &cube.Scale);
+    //             XrMatrix4x4f mvp;
+    //             XrMatrix4x4f_Multiply(&mvp, &vp, &model);
+    //             glUniformMatrix4fv(m_modelViewProjectionUniformLocation, 1, GL_FALSE, reinterpret_cast<const GLfloat*>(&mvp));
+    //
+    //             // Draw the cube.
+    //             glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(ArraySize(Geometry::c_cubeIndices)), GL_UNSIGNED_SHORT, nullptr);
+    //         }
+
+    c.glBindVertexArray(0);
+    c.glUseProgram(0);
+    c.glBindFramebuffer(c.GL_FRAMEBUFFER, 0);
+}
 
 pub fn GetSupportedSwapchainSampleCount(_: *const c.XrViewConfigurationView) u32 {
     return 1;

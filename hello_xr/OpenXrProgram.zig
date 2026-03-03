@@ -2,6 +2,7 @@ const std = @import("std");
 const xr_result = @import("xr_result.zig");
 const xr_util = @import("xr_util.zig");
 const CHECK_XRCMD = xr_util.CHECK_XRCMD;
+const CHECK_XRRESULT = xr_util.CHECK_XRRESULT;
 // #include <openxr/openxr.h>
 // #include "common.h"
 // #include "options.h"
@@ -10,6 +11,7 @@ const Options = @import("Options.zig");
 const platformplugin = @import("platform/platformplugin_posix.zig");
 const graphicsplugin = @import("gfx/graphicsplugin_opengles.zig");
 const c = @import("gfx/gfxwrapper_opengl_wayland.zig").c;
+const Cube = @import("Cube.zig");
 // #include "openxr_program.h"
 // #include <common/xr_linear.h>
 // #include <array>
@@ -102,23 +104,23 @@ const Swapchain = struct {
     height: u32,
 };
 
-// namespace Side {
-// const int LEFT = 0;
-// const int RIGHT = 1;
-// const int COUNT = 2;
-// }  // namespace Side
-//
-// struct InputState {
-//     XrActionSet actionSet{XR_NULL_HANDLE};
-//     XrAction grabAction{XR_NULL_HANDLE};
-//     XrAction poseAction{XR_NULL_HANDLE};
-//     XrAction vibrateAction{XR_NULL_HANDLE};
-//     XrAction quitAction{XR_NULL_HANDLE};
-//     std::array<XrPath, Side::COUNT> handSubactionPath;
-//     std::array<XrSpace, Side::COUNT> handSpace;
-//     std::array<float, Side::COUNT> handScale = {{1.0f, 1.0f}};
-//     std::array<XrBool32, Side::COUNT> handActive;
-// };
+const Side = struct {
+    const LEFT = 0;
+    const RIGHT = 1;
+    const COUNT = 2;
+};
+
+const InputState = struct {
+    actionSet: c.XrActionSet = null,
+    // XrAction grabAction{XR_NULL_HANDLE};
+    // XrAction poseAction{XR_NULL_HANDLE};
+    // XrAction vibrateAction{XR_NULL_HANDLE};
+    // XrAction quitAction{XR_NULL_HANDLE};
+    // std::array<XrPath, Side::COUNT> handSubactionPath;
+    // std::array<XrSpace, Side::COUNT> handSpace;
+    // std::array<float, Side::COUNT> handScale = {{1.0f, 1.0f}};
+    handActive: [Side.COUNT]c.XrBool32 = undefined,
+};
 
 var m_configViews: std.ArrayList(c.XrViewConfigurationView) = .{};
 var m_swapchains: std.ArrayList(Swapchain) = .{};
@@ -133,11 +135,12 @@ var m_sessionState: c.XrSessionState = c.XR_SESSION_STATE_UNKNOWN;
 var m_sessionRunning: bool = false;
 
 var m_eventDataBuffer: c.XrEventDataBuffer = undefined;
-// InputState m_input;
+var m_input = InputState;
 
 pub fn init(allocator: std.mem.Allocator, options: *Options) void {
     m_options = options;
     m_swapchainImages = .init(allocator);
+    graphicsplugin.init(allocator, options);
     // platformplugin.UpdateOptions(options);
     // graphicsplugin.UpdateOptions(options);
 }
@@ -955,15 +958,15 @@ pub fn IsSessionFocused() bool {
 }
 
 pub fn PollActions() void {
-    //     m_input.handActive = {XR_FALSE, XR_FALSE};
-    //
-    //     // Sync actions
-    //     const XrActiveActionSet activeActionSet{m_input.actionSet, XR_NULL_PATH};
+    // m_input.handActive = .{ c.XR_FALSE, c.XR_FALSE };
+
+    // Sync actions
+    // const activeActionSet: c.XrActiveActionSet = .{ .actionSet = m_input.actionSet, .subactionPath = c.XR_NULL_PATH };
     //     XrActionsSyncInfo syncInfo{XR_TYPE_ACTIONS_SYNC_INFO};
     //     syncInfo.countActiveActionSets = 1;
     //     syncInfo.activeActionSets = &activeActionSet;
     //     CHECK_XRCMD(xrSyncActions(m_session, &syncInfo));
-    //
+
     //     // Get pose and grab action state and start haptic vibrate when hand is 90% squeezed.
     //     for (auto hand : {Side::LEFT, Side::RIGHT}) {
     //         XrActionStateGetInfo getInfo{XR_TYPE_ACTION_STATE_GET_INFO};
@@ -1003,131 +1006,151 @@ pub fn PollActions() void {
     //     }
 }
 
-// static bool RenderLayer(XrTime predictedDisplayTime, std::vector<XrCompositionLayerProjectionView>& projectionLayerViews,
-//                         XrCompositionLayerProjection& layer) {
-//     XrResult res;
-//
-//     XrViewState viewState{XR_TYPE_VIEW_STATE};
-//     uint32_t viewCapacityInput = (uint32_t)m_views.size();
-//     uint32_t viewCountOutput;
-//
-//     XrViewLocateInfo viewLocateInfo{XR_TYPE_VIEW_LOCATE_INFO};
-//     viewLocateInfo.viewConfigurationType = m_options->Parsed.ViewConfigType;
-//     viewLocateInfo.displayTime = predictedDisplayTime;
-//     viewLocateInfo.space = m_appSpace;
-//
-//     res = xrLocateViews(m_session, &viewLocateInfo, &viewState, viewCapacityInput, &viewCountOutput, m_views.data());
-//     CHECK_XRRESULT(res, "xrLocateViews");
-//     if ((viewState.viewStateFlags & XR_VIEW_STATE_POSITION_VALID_BIT) == 0 ||
-//         (viewState.viewStateFlags & XR_VIEW_STATE_ORIENTATION_VALID_BIT) == 0) {
-//         return false;  // There is no valid tracking poses for the views.
-//     }
-//
-//     CHECK(viewCountOutput == viewCapacityInput);
-//     CHECK(viewCountOutput == m_configViews.size());
-//     CHECK(viewCountOutput == m_swapchains.size());
-//
-//     projectionLayerViews.resize(viewCountOutput);
-//
-//     // For each locatable space that we want to visualize, render a 25cm cube.
-//     std::vector<Cube> cubes;
-//
-//     for (XrSpace visualizedSpace : m_visualizedSpaces) {
-//         XrSpaceLocation spaceLocation{XR_TYPE_SPACE_LOCATION};
-//         res = xrLocateSpace(visualizedSpace, m_appSpace, predictedDisplayTime, &spaceLocation);
-//         CHECK_XRRESULT(res, "xrLocateSpace");
-//         if (XR_UNQUALIFIED_SUCCESS(res)) {
-//             if ((spaceLocation.locationFlags & XR_SPACE_LOCATION_POSITION_VALID_BIT) != 0 &&
-//                 (spaceLocation.locationFlags & XR_SPACE_LOCATION_ORIENTATION_VALID_BIT) != 0) {
-//                 cubes.push_back(Cube{spaceLocation.pose, {0.25f, 0.25f, 0.25f}});
-//             }
-//         } else {
-//             Log::Write(Log::Level::Verbose, Fmt("Unable to locate a visualized reference space in app space: %d", res));
-//         }
-//     }
-//
-//     // Render a 10cm cube scaled by grabAction for each hand. Note renderHand will only be
-//     // true when the application has focus.
-//     for (auto hand : {Side::LEFT, Side::RIGHT}) {
-//         XrSpaceLocation spaceLocation{XR_TYPE_SPACE_LOCATION};
-//         res = xrLocateSpace(m_input.handSpace[hand], m_appSpace, predictedDisplayTime, &spaceLocation);
-//         CHECK_XRRESULT(res, "xrLocateSpace");
-//         if (XR_UNQUALIFIED_SUCCESS(res)) {
-//             if ((spaceLocation.locationFlags & XR_SPACE_LOCATION_POSITION_VALID_BIT) != 0 &&
-//                 (spaceLocation.locationFlags & XR_SPACE_LOCATION_ORIENTATION_VALID_BIT) != 0) {
-//                 float scale = 0.1f * m_input.handScale[hand];
-//                 cubes.push_back(Cube{spaceLocation.pose, {scale, scale, scale}});
-//             }
-//         } else {
-//             // Tracking loss is expected when the hand is not active so only log a message
-//             // if the hand is active.
-//             if (m_input.handActive[hand] == XR_TRUE) {
-//                 const char* handName[] = {"left", "right"};
-//                 Log::Write(Log::Level::Verbose, Fmt("Unable to locate %s hand action space in app space: %d", handName[hand], res));
-//             }
-//         }
-//     }
-//
-//     // Render view to the appropriate part of the swapchain image.
-//     for (uint32_t i = 0; i < viewCountOutput; i++) {
-//         // Each view has a separate swapchain which is acquired, rendered to, and released.
-//         const Swapchain viewSwapchain = m_swapchains[i];
-//
-//         XrSwapchainImageAcquireInfo acquireInfo{XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO};
-//
-//         uint32_t swapchainImageIndex;
-//         CHECK_XRCMD(xrAcquireSwapchainImage(viewSwapchain.handle, &acquireInfo, &swapchainImageIndex));
-//
-//         XrSwapchainImageWaitInfo waitInfo{XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO};
-//         waitInfo.timeout = XR_INFINITE_DURATION;
-//         CHECK_XRCMD(xrWaitSwapchainImage(viewSwapchain.handle, &waitInfo));
-//
-//         projectionLayerViews[i] = {XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW};
-//         projectionLayerViews[i].pose = m_views[i].pose;
-//         projectionLayerViews[i].fov = m_views[i].fov;
-//         projectionLayerViews[i].subImage.swapchain = viewSwapchain.handle;
-//         projectionLayerViews[i].subImage.imageRect.offset = {0, 0};
-//         projectionLayerViews[i].subImage.imageRect.extent = {viewSwapchain.width, viewSwapchain.height};
-//
-//         const XrSwapchainImageBaseHeader* const swapchainImage = m_swapchainImages[viewSwapchain.handle][swapchainImageIndex];
-//         XR_GFX_RenderView(&projectionLayerViews[i], swapchainImage, m_colorSwapchainFormat, cubes.data(), cubes.size());
-//
-//         XrSwapchainImageReleaseInfo releaseInfo{XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};
-//         CHECK_XRCMD(xrReleaseSwapchainImage(viewSwapchain.handle, &releaseInfo));
-//     }
-//
-//     layer.space = m_appSpace;
-//     layer.layerFlags = m_options->Parsed.EnvironmentBlendMode == XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND
-//                            ? XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT | XR_COMPOSITION_LAYER_UNPREMULTIPLIED_ALPHA_BIT
-//                            : 0;
-//     layer.viewCount = (uint32_t)projectionLayerViews.size();
-//     layer.views = projectionLayerViews.data();
-//     return true;
-// }
+fn RenderLayer(
+    allocator: std.mem.Allocator,
+    predictedDisplayTime: c.XrTime,
+    projectionLayerViews: *std.ArrayList(c.XrCompositionLayerProjectionView),
+    layer: *c.XrCompositionLayerProjection,
+) !bool {
+    var viewState: c.XrViewState = .{ .type = c.XR_TYPE_VIEW_STATE };
+    const viewCapacityInput: u32 = @intCast(m_views.items.len);
+    var viewCountOutput: u32 = undefined;
+    var viewLocateInfo: c.XrViewLocateInfo = .{
+        .type = c.XR_TYPE_VIEW_LOCATE_INFO,
+        .viewConfigurationType = m_options.parsed.ViewConfigType,
+        .displayTime = predictedDisplayTime,
+        .space = m_appSpace,
+    };
 
-pub fn RenderFrame() void {
-    //     CHECK(m_session != XR_NULL_HANDLE);
-    //
-    //     XrFrameWaitInfo frameWaitInfo{XR_TYPE_FRAME_WAIT_INFO};
-    //     XrFrameState frameState{XR_TYPE_FRAME_STATE};
-    //     CHECK_XRCMD(xrWaitFrame(m_session, &frameWaitInfo, &frameState));
-    //
-    //     XrFrameBeginInfo frameBeginInfo{XR_TYPE_FRAME_BEGIN_INFO};
-    //     CHECK_XRCMD(xrBeginFrame(m_session, &frameBeginInfo));
-    //
-    //     std::vector<XrCompositionLayerBaseHeader*> layers;
-    //     XrCompositionLayerProjection layer{XR_TYPE_COMPOSITION_LAYER_PROJECTION};
-    //     std::vector<XrCompositionLayerProjectionView> projectionLayerViews;
-    //     if (frameState.shouldRender == XR_TRUE) {
-    //         if (RenderLayer(frameState.predictedDisplayTime, projectionLayerViews, layer)) {
-    //             layers.push_back(reinterpret_cast<XrCompositionLayerBaseHeader*>(&layer));
+    const res = c.xrLocateViews(m_session, &viewLocateInfo, &viewState, viewCapacityInput, &viewCountOutput, m_views.items.ptr);
+    CHECK_XRRESULT(@src(), res, "xrLocateViews");
+    if ((viewState.viewStateFlags & c.XR_VIEW_STATE_POSITION_VALID_BIT) == 0 or
+        (viewState.viewStateFlags & c.XR_VIEW_STATE_ORIENTATION_VALID_BIT) == 0)
+    {
+        return false; // There is no valid tracking poses for the views.
+    }
+
+    std.debug.assert(viewCountOutput == viewCapacityInput);
+    std.debug.assert(viewCountOutput == m_configViews.items.len);
+    std.debug.assert(viewCountOutput == m_swapchains.items.len);
+
+    try projectionLayerViews.resize(allocator, viewCountOutput);
+
+    // For each locatable space that we want to visualize, render a 25cm cube.
+    const cubes: std.ArrayList(Cube) = .{};
+
+    // for (m_visualizedSpaces.items) |visualizedSpace| {
+    //         XrSpaceLocation spaceLocation{XR_TYPE_SPACE_LOCATION};
+    //         res = xrLocateSpace(visualizedSpace, m_appSpace, predictedDisplayTime, &spaceLocation);
+    //         CHECK_XRRESULT(res, "xrLocateSpace");
+    //         if (XR_UNQUALIFIED_SUCCESS(res)) {
+    //             if ((spaceLocation.locationFlags & XR_SPACE_LOCATION_POSITION_VALID_BIT) != 0 &&
+    //                 (spaceLocation.locationFlags & XR_SPACE_LOCATION_ORIENTATION_VALID_BIT) != 0) {
+    //                 cubes.push_back(Cube{spaceLocation.pose, {0.25f, 0.25f, 0.25f}});
+    //             }
+    //         } else {
+    //             Log::Write(Log::Level::Verbose, Fmt("Unable to locate a visualized reference space in app space: %d", res));
+    //         }
+    // }
+
+    // Render a 10cm cube scaled by grabAction for each hand. Note renderHand will only be
+    // true when the application has focus.
+    //     for (auto hand : {Side::LEFT, Side::RIGHT}) {
+    //         XrSpaceLocation spaceLocation{XR_TYPE_SPACE_LOCATION};
+    //         res = xrLocateSpace(m_input.handSpace[hand], m_appSpace, predictedDisplayTime, &spaceLocation);
+    //         CHECK_XRRESULT(res, "xrLocateSpace");
+    //         if (XR_UNQUALIFIED_SUCCESS(res)) {
+    //             if ((spaceLocation.locationFlags & XR_SPACE_LOCATION_POSITION_VALID_BIT) != 0 &&
+    //                 (spaceLocation.locationFlags & XR_SPACE_LOCATION_ORIENTATION_VALID_BIT) != 0) {
+    //                 float scale = 0.1f * m_input.handScale[hand];
+    //                 cubes.push_back(Cube{spaceLocation.pose, {scale, scale, scale}});
+    //             }
+    //         } else {
+    //             // Tracking loss is expected when the hand is not active so only log a message
+    //             // if the hand is active.
+    //             if (m_input.handActive[hand] == XR_TRUE) {
+    //                 const char* handName[] = {"left", "right"};
+    //                 Log::Write(Log::Level::Verbose, Fmt("Unable to locate %s hand action space in app space: %d", handName[hand], res));
+    //             }
     //         }
     //     }
-    //
-    //     XrFrameEndInfo frameEndInfo{XR_TYPE_FRAME_END_INFO};
-    //     frameEndInfo.displayTime = frameState.predictedDisplayTime;
-    //     frameEndInfo.environmentBlendMode = m_options->Parsed.EnvironmentBlendMode;
-    //     frameEndInfo.layerCount = (uint32_t)layers.size();
-    //     frameEndInfo.layers = layers.data();
-    //     CHECK_XRCMD(xrEndFrame(m_session, &frameEndInfo));
+
+    // Render view to the appropriate part of the swapchain image.
+    for (m_swapchains.items, 0..) |viewSwapchain, i| {
+        // Each view has a separate swapchain which is acquired, rendered to, and released.
+        var acquireInfo: c.XrSwapchainImageAcquireInfo = .{ .type = c.XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO };
+        var swapchainImageIndex: u32 = undefined;
+        CHECK_XRCMD(@src(), c.xrAcquireSwapchainImage(viewSwapchain.handle, &acquireInfo, &swapchainImageIndex));
+
+        var waitInfo: c.XrSwapchainImageWaitInfo = .{
+            .type = c.XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO,
+            .timeout = c.XR_INFINITE_DURATION,
+        };
+        CHECK_XRCMD(@src(), c.xrWaitSwapchainImage(viewSwapchain.handle, &waitInfo));
+
+        projectionLayerViews.items[i] = .{
+            .type = c.XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW,
+            .pose = m_views.items[i].pose,
+            .fov = m_views.items[i].fov,
+            .subImage = .{
+                .swapchain = viewSwapchain.handle,
+                .imageRect = .{
+                    .offset = .{ .x = 0, .y = 0 },
+                    .extent = .{ .width = @intCast(viewSwapchain.width), .height = @intCast(viewSwapchain.height) },
+                },
+            },
+        };
+
+        const entry = m_swapchainImages.get(viewSwapchain.handle).?;
+        const swapchainImage: *c.XrSwapchainImageBaseHeader = entry[swapchainImageIndex];
+        try graphicsplugin.RenderView(&projectionLayerViews.items[i], swapchainImage, m_colorSwapchainFormat, cubes.items);
+
+        var releaseInfo: c.XrSwapchainImageReleaseInfo = .{ .type = c.XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO };
+        CHECK_XRCMD(@src(), c.xrReleaseSwapchainImage(viewSwapchain.handle, &releaseInfo));
+    }
+
+    layer.space = m_appSpace;
+    layer.layerFlags = if (m_options.parsed.EnvironmentBlendMode == c.XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND)
+        c.XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT | c.XR_COMPOSITION_LAYER_UNPREMULTIPLIED_ALPHA_BIT
+    else
+        0;
+    layer.viewCount = @intCast(projectionLayerViews.items.len);
+    layer.views = projectionLayerViews.items.ptr;
+    return true;
+}
+
+pub fn RenderFrame(allocator: std.mem.Allocator) !void {
+    std.debug.assert(m_session != null);
+
+    var frameWaitInfo: c.XrFrameWaitInfo = .{ .type = c.XR_TYPE_FRAME_WAIT_INFO };
+    var frameState: c.XrFrameState = .{ .type = c.XR_TYPE_FRAME_STATE };
+    CHECK_XRCMD(@src(), c.xrWaitFrame(m_session, &frameWaitInfo, &frameState));
+
+    var frameBeginInfo: c.XrFrameBeginInfo = .{ .type = c.XR_TYPE_FRAME_BEGIN_INFO };
+    CHECK_XRCMD(@src(), c.xrBeginFrame(m_session, &frameBeginInfo));
+
+    var layers: std.ArrayList(*c.XrCompositionLayerBaseHeader) = .{};
+    defer layers.deinit(allocator);
+    var layer: c.XrCompositionLayerProjection = .{ .type = c.XR_TYPE_COMPOSITION_LAYER_PROJECTION };
+    var projectionLayerViews: std.ArrayList(c.XrCompositionLayerProjectionView) = .{};
+    defer projectionLayerViews.deinit(allocator);
+    if (frameState.shouldRender == c.XR_TRUE) {
+        if (try RenderLayer(
+            allocator,
+            frameState.predictedDisplayTime,
+            &projectionLayerViews,
+            &layer,
+        )) {
+            try layers.append(allocator, @ptrCast(&layer));
+        }
+    }
+
+    var frameEndInfo: c.XrFrameEndInfo = .{
+        .type = c.XR_TYPE_FRAME_END_INFO,
+        .displayTime = frameState.predictedDisplayTime,
+        .environmentBlendMode = m_options.parsed.EnvironmentBlendMode,
+        .layerCount = @intCast(layers.items.len),
+        .layers = layers.items.ptr,
+    };
+    CHECK_XRCMD(@src(), c.xrEndFrame(m_session, &frameEndInfo));
 }

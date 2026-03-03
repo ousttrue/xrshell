@@ -9,6 +9,18 @@ EnvironmentBlendMode: FixedString = .init("Opaque"),
 AppSpace: FixedString = .init("Local"),
 parsed: Parsed = .{},
 
+pub fn GetBackgroundClearColor(this: @This()) [4]f32 {
+    const SlateGrey = [4]f32{ 0.184313729, 0.309803933, 0.309803933, 1.0 };
+    const TransparentBlack = [4]f32{ 0.0, 0.0, 0.0, 0.0 };
+    const Black = [4]f32{ 0.0, 0.0, 0.0, 1.0 };
+    return switch (this.parsed.EnvironmentBlendMode) {
+        c.XR_ENVIRONMENT_BLEND_MODE_OPAQUE => SlateGrey,
+        c.XR_ENVIRONMENT_BLEND_MODE_ADDITIVE => Black,
+        c.XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND => TransparentBlack,
+        else => SlateGrey,
+    };
+}
+
 fn ParseStrings(this: *@This()) !void {
     this.parsed.FormFactor = try GetXrFormFactor(this.FormFactor);
     this.parsed.ViewConfigType = try GetXrViewConfigurationType(this.ViewConfiguration);

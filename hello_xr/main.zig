@@ -4,7 +4,7 @@ const OpenXrProgram = @import("OpenXrProgram.zig");
 
 var quitKeyPressed = false;
 
-fn GetKey() void {
+fn gets() void {
     std.log.info("Press any key to shutdown...", .{});
     var buf: [1]u8 = undefined;
     var r = std.fs.File.stdin().reader(&buf);
@@ -28,12 +28,11 @@ pub fn main() !void {
     }
 
     // Spawn a thread to wait for a keypress
-    const thread = try std.Thread.spawn(.{}, GetKey, .{});
+    const thread = try std.Thread.spawn(.{}, gets, .{});
     defer thread.join();
 
     var requestRestart = true;
     while (!quitKeyPressed and requestRestart) {
-        // Initialize the OpenXR program.
         OpenXrProgram.init(allocator, &options);
         defer OpenXrProgram.deinit(allocator);
 
@@ -55,7 +54,7 @@ pub fn main() !void {
 
             if (OpenXrProgram.IsSessionRunning()) {
                 OpenXrProgram.PollActions();
-                OpenXrProgram.RenderFrame();
+                try OpenXrProgram.RenderFrame(allocator);
             } else {
                 // Throttle loop since xrWaitFrame won't be called.
                 std.Thread.sleep(std.time.ns_per_ms * 250);
