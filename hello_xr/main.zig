@@ -55,7 +55,7 @@ pub fn main() !void {
         options.SetEnvironmentBlendMode(try OpenXrProgram.GetPreferredBlendMode(allocator));
 
         try OpenXrProgram.InitializeDevice(allocator);
-                    OpenXrProgram.InitializeSession();
+        OpenXrProgram.InitializeSession();
         //             XR_PROG_CreateSwapchains();
 
         //             while (!quitKeyPressed) {
