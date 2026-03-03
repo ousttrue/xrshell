@@ -2,16 +2,6 @@ const std = @import("std");
 const Options = @import("Options.zig");
 const OpenXrProgram = @import("OpenXrProgram.zig");
 
-// #if defined(_WIN32)
-// // Favor the high performance NVIDIA or AMD GPUs
-// extern "C" {
-// // http://developer.download.nvidia.com/devzone/devcenter/gamegraphics/files/OptimusRenderingPolicies.pdf
-// __declspec(dllexport) DWORD NvOptimusEnablement = 0x00000001;
-// // https://gpuopen.com/learn/amdpowerxpressrequesthighperformance/
-// __declspec(dllexport) DWORD AmdPowerXpressRequestHighPerformance = 0x00000001;
-// }
-// #endif  // defined(_WIN32)
-
 var quitKeyPressed = false;
 
 fn GetKey() void {
@@ -41,13 +31,11 @@ pub fn main() !void {
     const thread = try std.Thread.spawn(.{}, GetKey, .{});
     defer thread.join();
 
-    // const requestRestart = true;
-    // while (!quitKeyPressed)
-    {
+    var requestRestart = true;
+    while (!quitKeyPressed and requestRestart) {
         // Initialize the OpenXR program.
-        // XR_PLATFORM_UpdateOptions(options);
-        // XR_GFX_UpdateOptions(options);
-        OpenXrProgram.init(&options);
+        OpenXrProgram.init(allocator, &options);
+        defer OpenXrProgram.deinit(allocator);
 
         try OpenXrProgram.CreateInstance(allocator);
         OpenXrProgram.InitializeSystem();
@@ -55,32 +43,23 @@ pub fn main() !void {
         options.SetEnvironmentBlendMode(try OpenXrProgram.GetPreferredBlendMode(allocator));
 
         try OpenXrProgram.InitializeDevice(allocator);
-        OpenXrProgram.InitializeSession();
-        //             XR_PROG_CreateSwapchains();
+        try OpenXrProgram.InitializeSession(allocator);
+        try OpenXrProgram.CreateSwapchains(allocator);
 
-        //             while (!quitKeyPressed) {
-        //                 bool exitRenderLoop = false;
-        //                 XR_PROG_PollEvents(&exitRenderLoop, &requestRestart);
-        //                 if (exitRenderLoop) {
-        //                     break;
-        //                 }
-        //
-        //                 if (XR_PROG_IsSessionRunning()) {
-        //                     XR_PROG_PollActions();
-        //                     XR_PROG_RenderFrame();
-        //                 } else {
-        //                     // Throttle loop since xrWaitFrame won't be called.
-        //                     std::this_thread::sleep_for(std::chrono::milliseconds(250));
-        //                 }
-        //             }
+        while (!quitKeyPressed) {
+            var exitRenderLoop = false;
+            OpenXrProgram.PollEvents(&exitRenderLoop, &requestRestart);
+            if (exitRenderLoop) {
+                break;
+            }
+
+            if (OpenXrProgram.IsSessionRunning()) {
+                OpenXrProgram.PollActions();
+                OpenXrProgram.RenderFrame();
+            } else {
+                // Throttle loop since xrWaitFrame won't be called.
+                std.Thread.sleep(std.time.ns_per_ms * 250);
+            }
+        }
     }
-
-    //         return 0;
-    //     } catch (const std::exception& ex) {
-    //         Log::Write(Log::Level::Error, ex.what());
-    //         return 1;
-    //     } catch (...) {
-    //         Log::Write(Log::Level::Error, "Unknown Error");
-    //         return 1;
-    //     }
 }

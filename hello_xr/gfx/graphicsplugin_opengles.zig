@@ -6,7 +6,7 @@ const geometry = @import("../geometry.zig");
 const gfxwrapper_opengl = @import("gfxwrapper_opengl_wayland.zig");
 const c = gfxwrapper_opengl.c;
 
-//     std::list<std::vector<XrSwapchainImageOpenGLESKHR>> m_swapchainImageBuffers;
+var m_swapchainImageBuffers: std.ArrayList([]c.XrSwapchainImageOpenGLESKHR) = .{};
 var m_swapchainFramebuffer: c.GLuint = 0;
 var m_program: c.GLuint = 0;
 var m_modelViewProjectionUniformLocation: c.GLint = 0;
@@ -81,31 +81,36 @@ const FragmentShaderGlsl: [*:0]const u8 =
 //     OpenGLESGraphicsPlugin(OpenGLESGraphicsPlugin&&) = delete;
 //     OpenGLESGraphicsPlugin& operator=(OpenGLESGraphicsPlugin&&) = delete;
 //
-//     ~OpenGLESGraphicsPlugin() override {
-//         if (m_swapchainFramebuffer != 0) {
-//             glDeleteFramebuffers(1, &m_swapchainFramebuffer);
-//         }
-//         if (m_program != 0) {
-//             glDeleteProgram(m_program);
-//         }
-//         if (m_vao != 0) {
-//             glDeleteVertexArrays(1, &m_vao);
-//         }
-//         if (m_cubeVertexBuffer != 0) {
-//             glDeleteBuffers(1, &m_cubeVertexBuffer);
-//         }
-//         if (m_cubeIndexBuffer != 0) {
-//             glDeleteBuffers(1, &m_cubeIndexBuffer);
-//         }
-//
-//         for (auto& colorToDepth : m_colorToDepthMap) {
-//             if (colorToDepth.second != 0) {
-//                 glDeleteTextures(1, &colorToDepth.second);
-//             }
-//         }
-//
-//         ksGpuWindow_Destroy(&window);
-//     }
+
+pub fn deinit(allocator: std.mem.Allocator) void {
+    for (m_swapchainImageBuffers.items) |item| {
+        allocator.free(item);
+    }
+    m_swapchainImageBuffers.deinit(allocator);
+    //         if (m_swapchainFramebuffer != 0) {
+    //             glDeleteFramebuffers(1, &m_swapchainFramebuffer);
+    //         }
+    //         if (m_program != 0) {
+    //             glDeleteProgram(m_program);
+    //         }
+    //         if (m_vao != 0) {
+    //             glDeleteVertexArrays(1, &m_vao);
+    //         }
+    //         if (m_cubeVertexBuffer != 0) {
+    //             glDeleteBuffers(1, &m_cubeVertexBuffer);
+    //         }
+    //         if (m_cubeIndexBuffer != 0) {
+    //             glDeleteBuffers(1, &m_cubeIndexBuffer);
+    //         }
+    //
+    //         for (auto& colorToDepth : m_colorToDepthMap) {
+    //             if (colorToDepth.second != 0) {
+    //                 glDeleteTextures(1, &colorToDepth.second);
+    //             }
+    //         }
+    //
+    //         ksGpuWindow_Destroy(&window);
+}
 
 //     ksGpuWindow window{};
 //
@@ -219,45 +224,53 @@ fn CheckProgram(prog: c.GLuint) void {
     }
 }
 
-//     int64_t SelectColorSwapchainFormat(const std::vector<int64_t>& runtimeFormats) const override {
-//         // List of supported color swapchain formats.
-//         std::vector<int64_t> supportedColorSwapchainFormats{GL_RGBA8, GL_RGBA8_SNORM};
-//
-//         // In OpenGLES 3.0+, the R, G, and B values after blending are converted into the non-linear
-//         // sRGB automatically.
-//         if (m_contextApiMajorVersion >= 3) {
-//             supportedColorSwapchainFormats.push_back(GL_SRGB8_ALPHA8);
-//         }
-//
-//         auto swapchainFormatIt = std::find_first_of(runtimeFormats.begin(), runtimeFormats.end(),
-//                                                     supportedColorSwapchainFormats.begin(), supportedColorSwapchainFormats.end());
-//         if (swapchainFormatIt == runtimeFormats.end()) {
-//             THROW("No runtime swapchain format supported for color swapchain");
-//         }
-//
-//         return *swapchainFormatIt;
-//     }
+pub fn SelectColorSwapchainFormat(allocator: std.mem.Allocator, runtimeFormats: []const i64) !i64 {
+    // List of supported color swapchain formats.
+    var supportedColorSwapchainFormats: std.ArrayList(i64) = .{};
+    defer supportedColorSwapchainFormats.deinit(allocator);
+    try supportedColorSwapchainFormats.append(allocator, c.GL_RGBA8);
+    try supportedColorSwapchainFormats.append(allocator, c.GL_RGBA8_SNORM);
+
+    // In OpenGLES 3.0+, the R, G, and B values after blending are converted into the non-linear
+    // sRGB automatically.
+    if (m_contextApiMajorVersion >= 3) {
+        try supportedColorSwapchainFormats.append(allocator, c.GL_SRGB8_ALPHA8);
+    }
+
+    for (runtimeFormats) |f| {
+        for (supportedColorSwapchainFormats.items) |s| {
+            if (f == s) {
+                return f;
+            }
+        }
+    }
+
+    @panic("No runtime swapchain format supported for color swapchain");
+}
 
 pub fn GetGraphicsBinding() *c.XrBaseInStructure {
     return gfxwrapper_opengl.binding();
 }
 
-//     std::vector<XrSwapchainImageBaseHeader*> AllocateSwapchainImageStructs(
-//         uint32_t capacity, const XrSwapchainCreateInfo& /*swapchainCreateInfo*/) override {
-//         // Allocate and initialize the buffer of image structs (must be sequential in memory for xrEnumerateSwapchainImages).
-//         // Return back an array of pointers to each swapchain image struct so the consumer doesn't need to know the type/size.
-//         std::vector<XrSwapchainImageOpenGLESKHR> swapchainImageBuffer(capacity, {XR_TYPE_SWAPCHAIN_IMAGE_OPENGL_ES_KHR});
-//         std::vector<XrSwapchainImageBaseHeader*> swapchainImageBase;
-//         for (XrSwapchainImageOpenGLESKHR& image : swapchainImageBuffer) {
-//             swapchainImageBase.push_back(reinterpret_cast<XrSwapchainImageBaseHeader*>(&image));
-//         }
-//
-//         // Keep the buffer alive by moving it into the list of buffers.
-//         m_swapchainImageBuffers.push_back(std::move(swapchainImageBuffer));
-//
-//         return swapchainImageBase;
-//     }
-//
+pub fn AllocateSwapchainImageStructs(
+    allocator: std.mem.Allocator,
+    swapchainImageBase: []*c.XrSwapchainImageBaseHeader,
+) !void {
+    // Allocate and initialize the buffer of image structs (must be sequential in memory for xrEnumerateSwapchainImages).
+    // Return back an array of pointers to each swapchain image struct so the consumer doesn't need to know the type/size.
+    const swapchainImageBuffer = try allocator.alloc(c.XrSwapchainImageOpenGLESKHR, swapchainImageBase.len);
+    for (swapchainImageBuffer) |*buf| {
+        buf.* = .{ .type = c.XR_TYPE_SWAPCHAIN_IMAGE_OPENGL_ES_KHR };
+    }
+    // std::vector<XrSwapchainImageBaseHeader*> swapchainImageBase;
+    for (swapchainImageBuffer, 0..) |*image, i| {
+        swapchainImageBase[i] = @ptrCast(image);
+    }
+
+    // Keep the buffer alive by moving it into the list of buffers.
+    try m_swapchainImageBuffers.append(allocator, swapchainImageBuffer);
+}
+
 //     uint32_t GetDepthTexture(uint32_t colorTexture) {
 //         // If a depth-stencil view has already been created for this back-buffer, use it.
 //         auto depthBufferIt = m_colorToDepthMap.find(colorTexture);
@@ -349,9 +362,9 @@ pub fn GetGraphicsBinding() *c.XrBaseInStructure {
 //         glUseProgram(0);
 //         glBindFramebuffer(GL_FRAMEBUFFER, 0);
 //     }
-//
-//     uint32_t GetSupportedSwapchainSampleCount(const XrViewConfigurationView&) override { return 1; }
-//
-//     void UpdateOptions(const std::shared_ptr<Options>& options) override { m_clearColor = options->GetBackgroundClearColor(); }
 
-// };
+pub fn GetSupportedSwapchainSampleCount(_: *const c.XrViewConfigurationView) u32 {
+    return 1;
+}
+
+//     void UpdateOptions(const std::shared_ptr<Options>& options) override { m_clearColor = options->GetBackgroundClearColor(); }

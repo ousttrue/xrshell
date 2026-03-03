@@ -51,7 +51,7 @@ fn GetXrEnvironmentBlendMode(environmentBlendModeStr: FixedString) !c.XrEnvironm
     return error.GetXrEnvironmentBlendMode;
 }
 
-const FixedString = extern struct {
+pub const FixedString = extern struct {
     c_str: [32]u8 = undefined,
 
     fn init(src: []const u8) @This() {
@@ -61,7 +61,7 @@ const FixedString = extern struct {
         return this;
     }
 
-    fn span(this: *const @This()) []const u8 {
+    pub fn span(this: *const @This()) []const u8 {
         return std.mem.sliceTo(
             &this.c_str,
             0,

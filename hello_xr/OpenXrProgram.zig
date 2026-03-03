@@ -29,15 +29,15 @@ fn GetXrVersionString(ver: c.XrVersion) ![]const u8 {
         c.XR_VERSION_PATCH(ver),
     });
 }
-//
+
 // namespace Math {
 // namespace Pose {
-// XrPosef Identity() {
-//     XrPosef t{};
-//     t.orientation.w = 1;
-//     return t;
-// }
-//
+fn Identity() c.XrPosef {
+    return .{
+        .orientation = .{ .w = 1 },
+    };
+}
+
 // XrPosef Translation(const XrVector3f& translation) {
 //     XrPosef t = Identity();
 //     t.position = translation;
@@ -55,37 +55,40 @@ fn GetXrVersionString(ver: c.XrVersion) ![]const u8 {
 // }
 // }  // namespace Pose
 // }  // namespace Math
-//
-// inline XrReferenceSpaceCreateInfo GetXrReferenceSpaceCreateInfo(const char* referenceSpaceTypeStr) {
-//     XrReferenceSpaceCreateInfo referenceSpaceCreateInfo{XR_TYPE_REFERENCE_SPACE_CREATE_INFO};
-//     referenceSpaceCreateInfo.poseInReferenceSpace = Math::Pose::Identity();
-//     if (EqualsIgnoreCase(referenceSpaceTypeStr, "View")) {
-//         referenceSpaceCreateInfo.referenceSpaceType = XR_REFERENCE_SPACE_TYPE_VIEW;
-//     } else if (EqualsIgnoreCase(referenceSpaceTypeStr, "ViewFront")) {
-//         // Render head-locked 2m in front of device.
-//         referenceSpaceCreateInfo.poseInReferenceSpace = Math::Pose::Translation({0.f, 0.f, -2.f}),
-//         referenceSpaceCreateInfo.referenceSpaceType = XR_REFERENCE_SPACE_TYPE_VIEW;
-//     } else if (EqualsIgnoreCase(referenceSpaceTypeStr, "Local")) {
-//         referenceSpaceCreateInfo.referenceSpaceType = XR_REFERENCE_SPACE_TYPE_LOCAL;
-//     } else if (EqualsIgnoreCase(referenceSpaceTypeStr, "Stage")) {
-//         referenceSpaceCreateInfo.referenceSpaceType = XR_REFERENCE_SPACE_TYPE_STAGE;
-//     } else if (EqualsIgnoreCase(referenceSpaceTypeStr, "StageLeft")) {
-//         referenceSpaceCreateInfo.poseInReferenceSpace = Math::Pose::RotateCCWAboutYAxis(0.f, {-2.f, 0.f, -2.f});
-//         referenceSpaceCreateInfo.referenceSpaceType = XR_REFERENCE_SPACE_TYPE_STAGE;
-//     } else if (EqualsIgnoreCase(referenceSpaceTypeStr, "StageRight")) {
-//         referenceSpaceCreateInfo.poseInReferenceSpace = Math::Pose::RotateCCWAboutYAxis(0.f, {2.f, 0.f, -2.f});
-//         referenceSpaceCreateInfo.referenceSpaceType = XR_REFERENCE_SPACE_TYPE_STAGE;
-//     } else if (EqualsIgnoreCase(referenceSpaceTypeStr, "StageLeftRotated")) {
-//         referenceSpaceCreateInfo.poseInReferenceSpace = Math::Pose::RotateCCWAboutYAxis(3.14f / 3.f, {-2.f, 0.5f, -2.f});
-//         referenceSpaceCreateInfo.referenceSpaceType = XR_REFERENCE_SPACE_TYPE_STAGE;
-//     } else if (EqualsIgnoreCase(referenceSpaceTypeStr, "StageRightRotated")) {
-//         referenceSpaceCreateInfo.poseInReferenceSpace = Math::Pose::RotateCCWAboutYAxis(-3.14f / 3.f, {2.f, 0.5f, -2.f});
-//         referenceSpaceCreateInfo.referenceSpaceType = XR_REFERENCE_SPACE_TYPE_STAGE;
-//     } else {
-//         throw std::invalid_argument(Fmt("Unknown reference space type '%s'", referenceSpaceTypeStr));
-//     }
-//     return referenceSpaceCreateInfo;
-// }
+
+fn GetXrReferenceSpaceCreateInfo(referenceSpaceTypeStr: []const u8) c.XrReferenceSpaceCreateInfo {
+    var referenceSpaceCreateInfo: c.XrReferenceSpaceCreateInfo = .{
+        .type = c.XR_TYPE_REFERENCE_SPACE_CREATE_INFO,
+        .poseInReferenceSpace = Identity(),
+    };
+    if (std.ascii.eqlIgnoreCase(referenceSpaceTypeStr, "View")) {
+        referenceSpaceCreateInfo.referenceSpaceType = c.XR_REFERENCE_SPACE_TYPE_VIEW;
+    } else if (std.ascii.eqlIgnoreCase(referenceSpaceTypeStr, "ViewFront")) {
+        // Render head-locked 2m in front of device.
+        // referenceSpaceCreateInfo.poseInReferenceSpace = Math::Pose::Translation({0.f, 0.f, -2.f}),
+        referenceSpaceCreateInfo.referenceSpaceType = c.XR_REFERENCE_SPACE_TYPE_VIEW;
+    } else if (std.ascii.eqlIgnoreCase(referenceSpaceTypeStr, "Local")) {
+        referenceSpaceCreateInfo.referenceSpaceType = c.XR_REFERENCE_SPACE_TYPE_LOCAL;
+    } else if (std.ascii.eqlIgnoreCase(referenceSpaceTypeStr, "Stage")) {
+        referenceSpaceCreateInfo.referenceSpaceType = c.XR_REFERENCE_SPACE_TYPE_STAGE;
+    } else if (std.ascii.eqlIgnoreCase(referenceSpaceTypeStr, "StageLeft")) {
+        // referenceSpaceCreateInfo.poseInReferenceSpace = Math::Pose::RotateCCWAboutYAxis(0.f, {-2.f, 0.f, -2.f});
+        referenceSpaceCreateInfo.referenceSpaceType = c.XR_REFERENCE_SPACE_TYPE_STAGE;
+    } else if (std.ascii.eqlIgnoreCase(referenceSpaceTypeStr, "StageRight")) {
+        // referenceSpaceCreateInfo.poseInReferenceSpace = Math::Pose::RotateCCWAboutYAxis(0.f, {2.f, 0.f, -2.f});
+        referenceSpaceCreateInfo.referenceSpaceType = c.XR_REFERENCE_SPACE_TYPE_STAGE;
+    } else if (std.ascii.eqlIgnoreCase(referenceSpaceTypeStr, "StageLeftRotated")) {
+        // referenceSpaceCreateInfo.poseInReferenceSpace = Math::Pose::RotateCCWAboutYAxis(3.14f / 3.f, {-2.f, 0.5f, -2.f});
+        referenceSpaceCreateInfo.referenceSpaceType = c.XR_REFERENCE_SPACE_TYPE_STAGE;
+    } else if (std.ascii.eqlIgnoreCase(referenceSpaceTypeStr, "StageRightRotated")) {
+        // referenceSpaceCreateInfo.poseInReferenceSpace = Math::Pose::RotateCCWAboutYAxis(-3.14f / 3.f, {2.f, 0.5f, -2.f});
+        referenceSpaceCreateInfo.referenceSpaceType = c.XR_REFERENCE_SPACE_TYPE_STAGE;
+    } else {
+        std.log.err("{s}", .{referenceSpaceTypeStr});
+        @panic("Unknown reference space type");
+    }
+    return referenceSpaceCreateInfo;
+}
 
 var m_options: *Options = undefined;
 var m_instance: c.XrInstance = null;
@@ -93,11 +96,11 @@ var m_session: c.XrSession = null;
 var m_appSpace: c.XrSpace = null;
 var m_systemId: c.XrSystemId = c.XR_NULL_SYSTEM_ID;
 
-// struct Swapchain {
-//     XrSwapchain handle;
-//     int32_t width;
-//     int32_t height;
-// };
+const Swapchain = struct {
+    handle: c.XrSwapchain,
+    width: u32,
+    height: u32,
+};
 
 // namespace Side {
 // const int LEFT = 0;
@@ -116,54 +119,69 @@ var m_systemId: c.XrSystemId = c.XR_NULL_SYSTEM_ID;
 //     std::array<float, Side::COUNT> handScale = {{1.0f, 1.0f}};
 //     std::array<XrBool32, Side::COUNT> handActive;
 // };
-//
-// std::vector<XrViewConfigurationView> m_configViews;
-// std::vector<Swapchain> m_swapchains;
-// std::map<XrSwapchain, std::vector<XrSwapchainImageBaseHeader*>> m_swapchainImages;
-// std::vector<XrView> m_views;
-// int64_t m_colorSwapchainFormat{-1};
-//
-// std::vector<XrSpace> m_visualizedSpaces;
-//
-// // Application's current lifecycle state according to the runtime
-// XrSessionState m_sessionState{XR_SESSION_STATE_UNKNOWN};
-// bool m_sessionRunning{false};
-//
-// XrEventDataBuffer m_eventDataBuffer;
+
+var m_configViews: std.ArrayList(c.XrViewConfigurationView) = .{};
+var m_swapchains: std.ArrayList(Swapchain) = .{};
+var m_swapchainImages: std.AutoHashMap(c.XrSwapchain, []*c.XrSwapchainImageBaseHeader) = undefined;
+var m_views: std.ArrayList(c.XrView) = .{};
+var m_colorSwapchainFormat: i64 = -1;
+
+var m_visualizedSpaces: std.ArrayList(c.XrSpace) = .{};
+
+// Application's current lifecycle state according to the runtime
+var m_sessionState: c.XrSessionState = c.XR_SESSION_STATE_UNKNOWN;
+var m_sessionRunning: bool = false;
+
+var m_eventDataBuffer: c.XrEventDataBuffer = undefined;
 // InputState m_input;
 
-pub fn init(options: *Options) void {
+pub fn init(allocator: std.mem.Allocator, options: *Options) void {
     m_options = options;
+    m_swapchainImages = .init(allocator);
+    // platformplugin.UpdateOptions(options);
+    // graphicsplugin.UpdateOptions(options);
 }
 
-// void XR_PROG_OpenXrProgram_deinit() {
-//     if (m_input.actionSet != XR_NULL_HANDLE) {
-//         for (auto hand : {Side::LEFT, Side::RIGHT}) {
-//             xrDestroySpace(m_input.handSpace[hand]);
-//         }
-//         xrDestroyActionSet(m_input.actionSet);
-//     }
-//
-//     for (Swapchain swapchain : m_swapchains) {
-//         xrDestroySwapchain(swapchain.handle);
-//     }
-//
-//     for (XrSpace visualizedSpace : m_visualizedSpaces) {
-//         xrDestroySpace(visualizedSpace);
-//     }
-//
-//     if (m_appSpace != XR_NULL_HANDLE) {
-//         xrDestroySpace(m_appSpace);
-//     }
-//
-//     if (m_session != XR_NULL_HANDLE) {
-//         xrDestroySession(m_session);
-//     }
-//
-//     if (m_instance != XR_NULL_HANDLE) {
-//         xrDestroyInstance(m_instance);
-//     }
-// }
+pub fn deinit(allocator: std.mem.Allocator) void {
+    graphicsplugin.deinit(allocator);
+    {
+        var it = m_swapchainImages.iterator();
+        while (it.next()) |item| {
+            allocator.free(item.value_ptr.*);
+        }
+        m_swapchainImages.deinit();
+    }
+    m_configViews.deinit(allocator);
+    m_swapchains.deinit(allocator);
+    m_views.deinit(allocator);
+    //     if (m_input.actionSet != XR_NULL_HANDLE) {
+    //         for (auto hand : {Side::LEFT, Side::RIGHT}) {
+    //             xrDestroySpace(m_input.handSpace[hand]);
+    //         }
+    //         xrDestroyActionSet(m_input.actionSet);
+    //     }
+    //
+    //     for (Swapchain swapchain : m_swapchains) {
+    //         xrDestroySwapchain(swapchain.handle);
+    //     }
+    //
+    //     for (XrSpace visualizedSpace : m_visualizedSpaces) {
+    //         xrDestroySpace(visualizedSpace);
+    //     }
+    m_visualizedSpaces.deinit(allocator);
+
+    //     if (m_appSpace != XR_NULL_HANDLE) {
+    //         xrDestroySpace(m_appSpace);
+    //     }
+    //
+    //     if (m_session != XR_NULL_HANDLE) {
+    //         xrDestroySession(m_session);
+    //     }
+
+    //     if (m_instance != XR_NULL_HANDLE) {
+    //         xrDestroyInstance(m_instance);
+    //     }
+}
 
 fn makeIndent(allocator: std.mem.Allocator, indent: usize) ![]const u8 {
     const str = try allocator.alloc(u8, indent);
@@ -410,20 +428,21 @@ pub fn InitializeDevice(allocator: std.mem.Allocator) !void {
     graphicsplugin.InitializeDevice(m_instance, m_systemId);
 }
 
-// static void LogReferenceSpaces() {
-//     CHECK(m_session != XR_NULL_HANDLE);
-//
-//     uint32_t spaceCount;
-//     CHECK_XRCMD(xrEnumerateReferenceSpaces(m_session, 0, &spaceCount, nullptr));
-//     std::vector<XrReferenceSpaceType> spaces(spaceCount);
-//     CHECK_XRCMD(xrEnumerateReferenceSpaces(m_session, spaceCount, &spaceCount, spaces.data()));
-//
-//     Log::Write(Log::Level::Info, Fmt("Available reference spaces: %d", spaceCount));
-//     for (XrReferenceSpaceType space : spaces) {
-//         Log::Write(Log::Level::Verbose, Fmt("  Name: %s", to_string(space)));
-//     }
-// }
-//
+fn LogReferenceSpaces(allocator: std.mem.Allocator) !void {
+    std.debug.assert(m_session != null);
+
+    var spaceCount: u32 = undefined;
+    CHECK_XRCMD(@src(), c.xrEnumerateReferenceSpaces(m_session, 0, &spaceCount, null));
+    const spaces = try allocator.alloc(c.XrReferenceSpaceType, spaceCount);
+    defer allocator.free(spaces);
+    CHECK_XRCMD(@src(), c.xrEnumerateReferenceSpaces(m_session, spaceCount, &spaceCount, spaces.ptr));
+
+    std.log.info("Available reference spaces: {}", .{spaceCount});
+    for (spaces) |space| {
+        std.log.debug("  Name: {}", .{space});
+    }
+}
+
 // static void InitializeActions() {
 //     // Create an action set.
 //     {
@@ -611,27 +630,27 @@ pub fn InitializeDevice(allocator: std.mem.Allocator) !void {
 //     attachInfo.actionSets = &m_input.actionSet;
 //     CHECK_XRCMD(xrAttachSessionActionSets(m_session, &attachInfo));
 // }
-//
-// static void CreateVisualizedSpaces() {
-//     CHECK(m_session != XR_NULL_HANDLE);
-//
-//     const char* visualizedSpaces[] = {
-//         "ViewFront", "Local", "Stage", "StageLeft", "StageRight", "StageLeftRotated", "StageRightRotated",
-//     };
-//
-//     for (const auto& visualizedSpace : visualizedSpaces) {
-//         XrReferenceSpaceCreateInfo referenceSpaceCreateInfo = GetXrReferenceSpaceCreateInfo(visualizedSpace);
-//         XrSpace space;
-//         XrResult res = xrCreateReferenceSpace(m_session, &referenceSpaceCreateInfo, &space);
-//         if (XR_SUCCEEDED(res)) {
-//             m_visualizedSpaces.push_back(space);
-//         } else {
-//             Log::Write(Log::Level::Warning, Fmt("Failed to create reference space %s with error %d", visualizedSpace, res));
-//         }
-//     }
-// }
 
-pub fn InitializeSession() void {
+fn CreateVisualizedSpaces(allocator: std.mem.Allocator) !void {
+    std.debug.assert(m_session != null);
+
+    const visualizedSpaces = [_][]const u8{
+        "ViewFront", "Local", "Stage", "StageLeft", "StageRight", "StageLeftRotated", "StageRightRotated",
+    };
+
+    for (visualizedSpaces) |visualizedSpace| {
+        const referenceSpaceCreateInfo = GetXrReferenceSpaceCreateInfo(visualizedSpace);
+        var space: c.XrSpace = undefined;
+        const res = c.xrCreateReferenceSpace(m_session, &referenceSpaceCreateInfo, &space);
+        if (c.XR_SUCCEEDED(res)) {
+            try m_visualizedSpaces.append(allocator, space);
+        } else {
+            std.log.warn("Failed to create reference space {s} with error {}", .{ visualizedSpace, res });
+        }
+    }
+}
+
+pub fn InitializeSession(allocator: std.mem.Allocator) !void {
     std.debug.assert(m_instance != null);
     std.debug.assert(m_session == null);
 
@@ -646,182 +665,218 @@ pub fn InitializeSession() void {
         CHECK_XRCMD(@src(), c.xrCreateSession(m_instance, &createInfo, &m_session));
     }
 
-    //     LogReferenceSpaces();
-    //     InitializeActions();
-    //     CreateVisualizedSpaces();
-    //
-    //     {
-    //         XrReferenceSpaceCreateInfo referenceSpaceCreateInfo = GetXrReferenceSpaceCreateInfo(m_options->AppSpace.c_str);
-    //         CHECK_XRCMD(xrCreateReferenceSpace(m_session, &referenceSpaceCreateInfo, &m_appSpace));
-    //     }
+    try LogReferenceSpaces(allocator);
+    // InitializeActions();
+    try CreateVisualizedSpaces(allocator);
+
+    {
+        const referenceSpaceCreateInfo = GetXrReferenceSpaceCreateInfo(m_options.AppSpace.span());
+        CHECK_XRCMD(@src(), c.xrCreateReferenceSpace(m_session, &referenceSpaceCreateInfo, &m_appSpace));
+    }
 }
 
-// void XR_PROG_CreateSwapchains() {
-//     CHECK(m_session != XR_NULL_HANDLE);
-//     CHECK(m_swapchains.empty());
-//     CHECK(m_configViews.empty());
-//
-//     // Read graphics properties for preferred swapchain length and logging.
-//     XrSystemProperties systemProperties{XR_TYPE_SYSTEM_PROPERTIES};
-//     CHECK_XRCMD(xrGetSystemProperties(m_instance, m_systemId, &systemProperties));
-//
-//     // Log system properties.
-//     Log::Write(Log::Level::Info,
-//                Fmt("System Properties: Name=%s VendorId=%d", systemProperties.systemName, systemProperties.vendorId));
-//     Log::Write(Log::Level::Info,
-//                Fmt("System Graphics Properties: MaxWidth=%d MaxHeight=%d MaxLayers=%d",
-//                    systemProperties.graphicsProperties.maxSwapchainImageWidth,
-//                    systemProperties.graphicsProperties.maxSwapchainImageHeight, systemProperties.graphicsProperties.maxLayerCount));
-//     Log::Write(Log::Level::Info, Fmt("System Tracking Properties: OrientationTracking=%s PositionTracking=%s",
-//                                      systemProperties.trackingProperties.orientationTracking == XR_TRUE ? "True" : "False",
-//                                      systemProperties.trackingProperties.positionTracking == XR_TRUE ? "True" : "False"));
-//
-//     // Note: No other view configurations exist at the time this code was written. If this
-//     // condition is not met, the project will need to be audited to see how support should be
-//     // added.
-//     CHECK_MSG(m_options->Parsed.ViewConfigType == XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO, "Unsupported view configuration type");
-//
-//     // Query and cache view configuration views.
-//     uint32_t viewCount;
-//     CHECK_XRCMD(
-//         xrEnumerateViewConfigurationViews(m_instance, m_systemId, m_options->Parsed.ViewConfigType, 0, &viewCount, nullptr));
-//     m_configViews.resize(viewCount, {XR_TYPE_VIEW_CONFIGURATION_VIEW});
-//     CHECK_XRCMD(xrEnumerateViewConfigurationViews(m_instance, m_systemId, m_options->Parsed.ViewConfigType, viewCount, &viewCount,
-//                                                   m_configViews.data()));
-//
-//     // Create and cache view buffer for xrLocateViews later.
-//     m_views.resize(viewCount, {XR_TYPE_VIEW});
-//
-//     // Create the swapchain and get the images.
-//     if (viewCount > 0) {
-//         // Select a swapchain format.
-//         uint32_t swapchainFormatCount;
-//         CHECK_XRCMD(xrEnumerateSwapchainFormats(m_session, 0, &swapchainFormatCount, nullptr));
-//         std::vector<int64_t> swapchainFormats(swapchainFormatCount);
-//         CHECK_XRCMD(xrEnumerateSwapchainFormats(m_session, (uint32_t)swapchainFormats.size(), &swapchainFormatCount,
-//                                                 swapchainFormats.data()));
-//         CHECK(swapchainFormatCount == swapchainFormats.size());
-//         m_colorSwapchainFormat = XR_GFX_SelectColorSwapchainFormat(swapchainFormats.data(), swapchainFormats.size());
-//
-//         // Print swapchain formats and the selected one.
-//         {
-//             std::string swapchainFormatsString;
-//             for (int64_t format : swapchainFormats) {
-//                 const bool selected = format == m_colorSwapchainFormat;
-//                 swapchainFormatsString += " ";
-//                 if (selected) {
-//                     swapchainFormatsString += "[";
-//                 }
-//                 swapchainFormatsString += std::to_string(format);
-//                 if (selected) {
-//                     swapchainFormatsString += "]";
-//                 }
-//             }
-//             Log::Write(Log::Level::Verbose, Fmt("Swapchain Formats: %s", swapchainFormatsString.c_str()));
-//         }
-//
-//         // Create a swapchain for each view.
-//         for (uint32_t i = 0; i < viewCount; i++) {
-//             const XrViewConfigurationView& vp = m_configViews[i];
-//             Log::Write(Log::Level::Info,
-//                        Fmt("Creating swapchain for view %d with dimensions Width=%d Height=%d SampleCount=%d", i,
-//                            vp.recommendedImageRectWidth, vp.recommendedImageRectHeight, vp.recommendedSwapchainSampleCount));
-//
-//             // Create the swapchain.
-//             XrSwapchainCreateInfo swapchainCreateInfo{XR_TYPE_SWAPCHAIN_CREATE_INFO};
-//             swapchainCreateInfo.arraySize = 1;
-//             swapchainCreateInfo.format = m_colorSwapchainFormat;
-//             swapchainCreateInfo.width = vp.recommendedImageRectWidth;
-//             swapchainCreateInfo.height = vp.recommendedImageRectHeight;
-//             swapchainCreateInfo.mipCount = 1;
-//             swapchainCreateInfo.faceCount = 1;
-//             swapchainCreateInfo.sampleCount = XR_GFX_GetSupportedSwapchainSampleCount(&vp);
-//             swapchainCreateInfo.usageFlags = XR_SWAPCHAIN_USAGE_SAMPLED_BIT | XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT;
-//             Swapchain swapchain;
-//             swapchain.width = swapchainCreateInfo.width;
-//             swapchain.height = swapchainCreateInfo.height;
-//             CHECK_XRCMD(xrCreateSwapchain(m_session, &swapchainCreateInfo, &swapchain.handle));
-//
-//             m_swapchains.push_back(swapchain);
-//
-//             uint32_t imageCount;
-//             CHECK_XRCMD(xrEnumerateSwapchainImages(swapchain.handle, 0, &imageCount, nullptr));
-//             // XXX This should really just return XrSwapchainImageBaseHeader*
-//             std::vector<XrSwapchainImageBaseHeader*> swapchainImages(imageCount);
-//             XR_GFX_AllocateSwapchainImageStructs(imageCount, swapchainCreateInfo, swapchainImages.data());
-//             CHECK_XRCMD(xrEnumerateSwapchainImages(swapchain.handle, imageCount, &imageCount, swapchainImages[0]));
-//
-//             m_swapchainImages.insert(std::make_pair(swapchain.handle, std::move(swapchainImages)));
-//         }
-//     }
-// }
-//
-// // Return event if one is available, otherwise return null.
-// static const XrEventDataBaseHeader* TryReadNextEvent() {
-//     // It is sufficient to clear the just the XrEventDataBuffer header to
-//     // XR_TYPE_EVENT_DATA_BUFFER
-//     XrEventDataBaseHeader* baseHeader = reinterpret_cast<XrEventDataBaseHeader*>(&m_eventDataBuffer);
-//     *baseHeader = {XR_TYPE_EVENT_DATA_BUFFER};
-//     const XrResult xr = xrPollEvent(m_instance, &m_eventDataBuffer);
-//     if (xr == XR_SUCCESS) {
-//         if (baseHeader->type == XR_TYPE_EVENT_DATA_EVENTS_LOST) {
-//             const XrEventDataEventsLost* const eventsLost = reinterpret_cast<const XrEventDataEventsLost*>(baseHeader);
-//             Log::Write(Log::Level::Warning, Fmt("%d events lost", eventsLost->lostEventCount));
-//         }
-//
-//         return baseHeader;
-//     }
-//     if (xr == XR_EVENT_UNAVAILABLE) {
-//         return nullptr;
-//     }
-//     THROW_XR(xr, "xrPollEvent");
-// }
-//
-// static void HandleSessionStateChangedEvent(const XrEventDataSessionStateChanged& stateChangedEvent, bool* exitRenderLoop,
-//                                            bool* requestRestart) {
-//     const XrSessionState oldState = m_sessionState;
-//     m_sessionState = stateChangedEvent.state;
-//
-//     Log::Write(Log::Level::Info, Fmt("XrEventDataSessionStateChanged: state %s->%s session=%lld time=%lld", to_string(oldState),
-//                                      to_string(m_sessionState), stateChangedEvent.session, stateChangedEvent.time));
-//
-//     if ((stateChangedEvent.session != XR_NULL_HANDLE) && (stateChangedEvent.session != m_session)) {
-//         Log::Write(Log::Level::Error, "XrEventDataSessionStateChanged for unknown session");
-//         return;
-//     }
-//
-//     switch (m_sessionState) {
-//         case XR_SESSION_STATE_READY: {
-//             CHECK(m_session != XR_NULL_HANDLE);
-//             XrSessionBeginInfo sessionBeginInfo{XR_TYPE_SESSION_BEGIN_INFO};
-//             sessionBeginInfo.primaryViewConfigurationType = m_options->Parsed.ViewConfigType;
-//             CHECK_XRCMD(xrBeginSession(m_session, &sessionBeginInfo));
-//             m_sessionRunning = true;
-//             break;
-//         }
-//         case XR_SESSION_STATE_STOPPING: {
-//             CHECK(m_session != XR_NULL_HANDLE);
-//             m_sessionRunning = false;
-//             CHECK_XRCMD(xrEndSession(m_session))
-//             break;
-//         }
-//         case XR_SESSION_STATE_EXITING: {
-//             *exitRenderLoop = true;
-//             // Do not attempt to restart because user closed this session.
-//             *requestRestart = false;
-//             break;
-//         }
-//         case XR_SESSION_STATE_LOSS_PENDING: {
-//             *exitRenderLoop = true;
-//             // Poll for a new instance.
-//             *requestRestart = true;
-//             break;
-//         }
-//         default:
-//             break;
-//     }
-// }
-//
+pub fn CreateSwapchains(allocator: std.mem.Allocator) !void {
+    std.debug.assert(m_session != null);
+    std.debug.assert(m_swapchains.items.len == 0);
+    std.debug.assert(m_configViews.items.len == 0);
+
+    // Read graphics properties for preferred swapchain length and logging.
+    var systemProperties: c.XrSystemProperties = .{ .type = c.XR_TYPE_SYSTEM_PROPERTIES };
+    CHECK_XRCMD(@src(), c.xrGetSystemProperties(m_instance, m_systemId, &systemProperties));
+
+    // Log system properties.
+    std.log.info("System Properties: Name={s} VendorId={}", .{
+        systemProperties.systemName,
+        systemProperties.vendorId,
+    });
+    std.log.info("System Graphics Properties: MaxWidth={} MaxHeight={} MaxLayers={}", .{
+        systemProperties.graphicsProperties.maxSwapchainImageWidth,
+        systemProperties.graphicsProperties.maxSwapchainImageHeight,
+        systemProperties.graphicsProperties.maxLayerCount,
+    });
+    std.log.info("System Tracking Properties: OrientationTracking={s} PositionTracking={s}", .{
+        if (systemProperties.trackingProperties.orientationTracking == c.XR_TRUE) "True" else "False",
+        if (systemProperties.trackingProperties.positionTracking == c.XR_TRUE) "True" else "False",
+    });
+    // Note: No other view configurations exist at the time this code was written. If this
+    // condition is not met, the project will need to be audited to see how support should be
+    // added.
+    std.debug.assert(m_options.parsed.ViewConfigType == c.XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO); //, "Unsupported view configuration type");
+
+    // Query and cache view configuration views.
+    var viewCount: u32 = undefined;
+    CHECK_XRCMD(@src(), c.xrEnumerateViewConfigurationViews(m_instance, m_systemId, m_options.parsed.ViewConfigType, 0, &viewCount, null));
+    try m_configViews.resize(allocator, viewCount);
+    for (m_configViews.items) |*item| {
+        item.* = .{ .type = c.XR_TYPE_VIEW_CONFIGURATION_VIEW };
+    }
+    CHECK_XRCMD(@src(), c.xrEnumerateViewConfigurationViews(
+        m_instance,
+        m_systemId,
+        m_options.parsed.ViewConfigType,
+        viewCount,
+        &viewCount,
+        m_configViews.items.ptr,
+    ));
+
+    // Create and cache view buffer for xrLocateViews later.
+    try m_views.resize(allocator, viewCount);
+    for (m_views.items) |*item| {
+        item.* = .{ .type = c.XR_TYPE_VIEW };
+    }
+
+    // Create the swapchain and get the images.
+    if (viewCount > 0) {
+        // Select a swapchain format.
+        var swapchainFormatCount: u32 = undefined;
+        CHECK_XRCMD(@src(), c.xrEnumerateSwapchainFormats(m_session, 0, &swapchainFormatCount, null));
+        const swapchainFormats = try allocator.alloc(i64, swapchainFormatCount);
+        defer allocator.free(swapchainFormats);
+        CHECK_XRCMD(@src(), c.xrEnumerateSwapchainFormats(
+            m_session,
+            @intCast(swapchainFormats.len),
+            &swapchainFormatCount,
+            swapchainFormats.ptr,
+        ));
+        std.debug.assert(swapchainFormatCount == swapchainFormats.len);
+        m_colorSwapchainFormat = try graphicsplugin.SelectColorSwapchainFormat(allocator, swapchainFormats);
+
+        // Print swapchain formats and the selected one.
+        {
+            // const swapchainFormatsString: []const u8 = "";
+            var out = std.Io.Writer.Allocating.init(allocator);
+            defer out.deinit();
+            // std.io.Writer を値渡しすると壊れる
+            var w: *std.io.Writer = &out.writer;
+
+            for (swapchainFormats) |format| {
+                const selected = format == m_colorSwapchainFormat;
+                try w.writeAll(" ");
+                if (selected) {
+                    try w.writeAll("[");
+                }
+                try w.print("{}", .{format});
+                if (selected) {
+                    try w.writeAll("]");
+                }
+            }
+            const str = try out.toOwnedSlice();
+            defer allocator.free(str);
+            std.log.debug("Swapchain Formats: {s}", .{str});
+        }
+
+        // Create a swapchain for each view.
+        for (m_configViews.items, 0..) |vp, i| {
+            std.log.info("Creating swapchain for view {} with dimensions Width={} Height={} SampleCount={}", .{
+                i,
+                vp.recommendedImageRectWidth,
+                vp.recommendedImageRectHeight,
+                vp.recommendedSwapchainSampleCount,
+            });
+
+            // Create the swapchain.
+            var swapchainCreateInfo: c.XrSwapchainCreateInfo = .{
+                .type = c.XR_TYPE_SWAPCHAIN_CREATE_INFO,
+                .arraySize = 1,
+                .format = m_colorSwapchainFormat,
+                .width = vp.recommendedImageRectWidth,
+                .height = vp.recommendedImageRectHeight,
+                .mipCount = 1,
+                .faceCount = 1,
+                .sampleCount = graphicsplugin.GetSupportedSwapchainSampleCount(&vp),
+                .usageFlags = c.XR_SWAPCHAIN_USAGE_SAMPLED_BIT | c.XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT,
+            };
+
+            var swapchain: Swapchain = .{
+                .handle = null,
+                .width = swapchainCreateInfo.width,
+                .height = swapchainCreateInfo.height,
+            };
+            CHECK_XRCMD(@src(), c.xrCreateSwapchain(m_session, &swapchainCreateInfo, &swapchain.handle));
+
+            try m_swapchains.append(allocator, swapchain);
+
+            var imageCount: u32 = undefined;
+            CHECK_XRCMD(@src(), c.xrEnumerateSwapchainImages(swapchain.handle, 0, &imageCount, null));
+            // XXX This should really just return XrSwapchainImageBaseHeader*
+            const swapchainImages = try allocator.alloc(*c.XrSwapchainImageBaseHeader, imageCount);
+            try graphicsplugin.AllocateSwapchainImageStructs(allocator, swapchainImages);
+            CHECK_XRCMD(@src(), c.xrEnumerateSwapchainImages(swapchain.handle, imageCount, &imageCount, swapchainImages[0]));
+
+            try m_swapchainImages.put(swapchain.handle, swapchainImages);
+        }
+    }
+}
+
+// Return event if one is available, otherwise return null.
+pub fn TryReadNextEvent() ?*c.XrEventDataBaseHeader {
+    // It is sufficient to clear the just the XrEventDataBuffer header to
+    // XR_TYPE_EVENT_DATA_BUFFER
+    const baseHeader: *c.XrEventDataBaseHeader = @ptrCast(&m_eventDataBuffer);
+    baseHeader.* = .{ .type = c.XR_TYPE_EVENT_DATA_BUFFER };
+    const xr = c.xrPollEvent(m_instance, &m_eventDataBuffer);
+    if (xr == c.XR_SUCCESS) {
+        if (baseHeader.type == c.XR_TYPE_EVENT_DATA_EVENTS_LOST) {
+            const eventsLost: *c.XrEventDataEventsLost = @ptrCast(baseHeader);
+            std.log.warn("{} events lost", .{eventsLost.lostEventCount});
+        }
+        return baseHeader;
+    }
+    if (xr == c.XR_EVENT_UNAVAILABLE) {
+        return null;
+    }
+    @panic("xrPollEvent");
+}
+
+fn HandleSessionStateChangedEvent(
+    stateChangedEvent: *c.XrEventDataSessionStateChanged,
+    exitRenderLoop: *bool,
+    requestRestart: *bool,
+) void {
+    const oldState = m_sessionState;
+    m_sessionState = stateChangedEvent.state;
+
+    std.log.info("XrEventDataSessionStateChanged: state {}->{} session={?} time={}", .{
+        oldState,
+        m_sessionState,
+        stateChangedEvent.session,
+        stateChangedEvent.time,
+    });
+
+    if ((stateChangedEvent.session != null) and (stateChangedEvent.session != m_session)) {
+        std.log.err("XrEventDataSessionStateChanged for unknown session", .{});
+        return;
+    }
+
+    switch (m_sessionState) {
+        c.XR_SESSION_STATE_READY => {
+            std.debug.assert(m_session != null);
+            var sessionBeginInfo: c.XrSessionBeginInfo = .{
+                .type = c.XR_TYPE_SESSION_BEGIN_INFO,
+            };
+            sessionBeginInfo.primaryViewConfigurationType = m_options.parsed.ViewConfigType;
+            CHECK_XRCMD(@src(), c.xrBeginSession(m_session, &sessionBeginInfo));
+            m_sessionRunning = true;
+        },
+        c.XR_SESSION_STATE_STOPPING => {
+            std.debug.assert(m_session != null);
+            m_sessionRunning = false;
+            CHECK_XRCMD(@src(), c.xrEndSession(m_session));
+        },
+        c.XR_SESSION_STATE_EXITING => {
+            exitRenderLoop.* = true;
+            // Do not attempt to restart because user closed this session.
+            requestRestart.* = false;
+        },
+        c.XR_SESSION_STATE_LOSS_PENDING => {
+            exitRenderLoop.* = true;
+            // Poll for a new instance.
+            requestRestart.* = true;
+        },
+        else => {},
+    }
+}
+
 // static void LogActionSourceName(XrAction action, const std::string& actionName) {
 //     XrBoundSourcesForActionEnumerateInfo getInfo = {XR_TYPE_BOUND_SOURCES_FOR_ACTION_ENUMERATE_INFO};
 //     getInfo.action = action;
@@ -858,93 +913,96 @@ pub fn InitializeSession() void {
 //     Log::Write(Log::Level::Info,
 //                Fmt("%s action is bound to %s", actionName.c_str(), ((!sourceName.empty()) ? sourceName.c_str() : "nothing")));
 // }
-//
-// void XR_PROG_PollEvents(bool* exitRenderLoop, bool* requestRestart) {
-//     *exitRenderLoop = *requestRestart = false;
-//
-//     // Process all pending messages.
-//     while (const XrEventDataBaseHeader* event = TryReadNextEvent()) {
-//         switch (event->type) {
-//             case XR_TYPE_EVENT_DATA_INSTANCE_LOSS_PENDING: {
-//                 const auto& instanceLossPending = *reinterpret_cast<const XrEventDataInstanceLossPending*>(event);
-//                 Log::Write(Log::Level::Warning, Fmt("XrEventDataInstanceLossPending by %lld", instanceLossPending.lossTime));
-//                 *exitRenderLoop = true;
-//                 *requestRestart = true;
-//                 return;
-//             }
-//             case XR_TYPE_EVENT_DATA_SESSION_STATE_CHANGED: {
-//                 auto sessionStateChangedEvent = *reinterpret_cast<const XrEventDataSessionStateChanged*>(event);
-//                 HandleSessionStateChangedEvent(sessionStateChangedEvent, exitRenderLoop, requestRestart);
-//                 break;
-//             }
-//             case XR_TYPE_EVENT_DATA_INTERACTION_PROFILE_CHANGED:
-//                 LogActionSourceName(m_input.grabAction, "Grab");
-//                 LogActionSourceName(m_input.quitAction, "Quit");
-//                 LogActionSourceName(m_input.poseAction, "Pose");
-//                 LogActionSourceName(m_input.vibrateAction, "Vibrate");
-//                 break;
-//             case XR_TYPE_EVENT_DATA_REFERENCE_SPACE_CHANGE_PENDING:
-//             default: {
-//                 Log::Write(Log::Level::Verbose, Fmt("Ignoring event type %d", event->type));
-//                 break;
-//             }
-//         }
-//     }
-// }
-//
-// bool XR_PROG_IsSessionRunning() { return m_sessionRunning; }
-//
-// bool XR_PROG_IsSessionFocused() { return m_sessionState == XR_SESSION_STATE_FOCUSED; }
-//
-// void XR_PROG_PollActions() {
-//     m_input.handActive = {XR_FALSE, XR_FALSE};
-//
-//     // Sync actions
-//     const XrActiveActionSet activeActionSet{m_input.actionSet, XR_NULL_PATH};
-//     XrActionsSyncInfo syncInfo{XR_TYPE_ACTIONS_SYNC_INFO};
-//     syncInfo.countActiveActionSets = 1;
-//     syncInfo.activeActionSets = &activeActionSet;
-//     CHECK_XRCMD(xrSyncActions(m_session, &syncInfo));
-//
-//     // Get pose and grab action state and start haptic vibrate when hand is 90% squeezed.
-//     for (auto hand : {Side::LEFT, Side::RIGHT}) {
-//         XrActionStateGetInfo getInfo{XR_TYPE_ACTION_STATE_GET_INFO};
-//         getInfo.action = m_input.grabAction;
-//         getInfo.subactionPath = m_input.handSubactionPath[hand];
-//
-//         XrActionStateFloat grabValue{XR_TYPE_ACTION_STATE_FLOAT};
-//         CHECK_XRCMD(xrGetActionStateFloat(m_session, &getInfo, &grabValue));
-//         if (grabValue.isActive == XR_TRUE) {
-//             // Scale the rendered hand by 1.0f (open) to 0.5f (fully squeezed).
-//             m_input.handScale[hand] = 1.0f - 0.5f * grabValue.currentState;
-//             if (grabValue.currentState > 0.9f) {
-//                 XrHapticVibration vibration{XR_TYPE_HAPTIC_VIBRATION};
-//                 vibration.amplitude = 0.5;
-//                 vibration.duration = XR_MIN_HAPTIC_DURATION;
-//                 vibration.frequency = XR_FREQUENCY_UNSPECIFIED;
-//
-//                 XrHapticActionInfo hapticActionInfo{XR_TYPE_HAPTIC_ACTION_INFO};
-//                 hapticActionInfo.action = m_input.vibrateAction;
-//                 hapticActionInfo.subactionPath = m_input.handSubactionPath[hand];
-//                 CHECK_XRCMD(xrApplyHapticFeedback(m_session, &hapticActionInfo, (XrHapticBaseHeader*)&vibration));
-//             }
-//         }
-//
-//         getInfo.action = m_input.poseAction;
-//         XrActionStatePose poseState{XR_TYPE_ACTION_STATE_POSE};
-//         CHECK_XRCMD(xrGetActionStatePose(m_session, &getInfo, &poseState));
-//         m_input.handActive[hand] = poseState.isActive;
-//     }
-//
-//     // There were no subaction paths specified for the quit action, because we don't care which hand did it.
-//     XrActionStateGetInfo getInfo{XR_TYPE_ACTION_STATE_GET_INFO, nullptr, m_input.quitAction, XR_NULL_PATH};
-//     XrActionStateBoolean quitValue{XR_TYPE_ACTION_STATE_BOOLEAN};
-//     CHECK_XRCMD(xrGetActionStateBoolean(m_session, &getInfo, &quitValue));
-//     if ((quitValue.isActive == XR_TRUE) && (quitValue.changedSinceLastSync == XR_TRUE) && (quitValue.currentState == XR_TRUE)) {
-//         CHECK_XRCMD(xrRequestExitSession(m_session));
-//     }
-// }
-//
+
+pub fn PollEvents(exitRenderLoop: *bool, requestRestart: *bool) void {
+    exitRenderLoop.* = false;
+    requestRestart.* = false;
+
+    // Process all pending messages.
+    while (TryReadNextEvent()) |event| {
+        switch (event.type) {
+            c.XR_TYPE_EVENT_DATA_INSTANCE_LOSS_PENDING => {
+                const instanceLossPending: *c.XrEventDataInstanceLossPending = @ptrCast(event);
+                std.log.warn("XrEventDataInstanceLossPending by {}", .{instanceLossPending.lossTime});
+                exitRenderLoop.* = true;
+                requestRestart.* = true;
+                return;
+            },
+            c.XR_TYPE_EVENT_DATA_SESSION_STATE_CHANGED => {
+                const sessionStateChangedEvent: *c.XrEventDataSessionStateChanged = @ptrCast(event);
+                HandleSessionStateChangedEvent(sessionStateChangedEvent, exitRenderLoop, requestRestart);
+            },
+            c.XR_TYPE_EVENT_DATA_INTERACTION_PROFILE_CHANGED => {
+                // LogActionSourceName(m_input.grabAction, "Grab");
+                // LogActionSourceName(m_input.quitAction, "Quit");
+                // LogActionSourceName(m_input.poseAction, "Pose");
+                // LogActionSourceName(m_input.vibrateAction, "Vibrate");
+            },
+            //             case XR_TYPE_EVENT_DATA_REFERENCE_SPACE_CHANGE_PENDING:
+            else => {
+                std.log.debug("Ignoring event type {}", .{event.type});
+            },
+        }
+    }
+}
+
+pub fn IsSessionRunning() bool {
+    return m_sessionRunning;
+}
+
+pub fn IsSessionFocused() bool {
+    return m_sessionState == c.XR_SESSION_STATE_FOCUSED;
+}
+
+pub fn PollActions() void {
+    //     m_input.handActive = {XR_FALSE, XR_FALSE};
+    //
+    //     // Sync actions
+    //     const XrActiveActionSet activeActionSet{m_input.actionSet, XR_NULL_PATH};
+    //     XrActionsSyncInfo syncInfo{XR_TYPE_ACTIONS_SYNC_INFO};
+    //     syncInfo.countActiveActionSets = 1;
+    //     syncInfo.activeActionSets = &activeActionSet;
+    //     CHECK_XRCMD(xrSyncActions(m_session, &syncInfo));
+    //
+    //     // Get pose and grab action state and start haptic vibrate when hand is 90% squeezed.
+    //     for (auto hand : {Side::LEFT, Side::RIGHT}) {
+    //         XrActionStateGetInfo getInfo{XR_TYPE_ACTION_STATE_GET_INFO};
+    //         getInfo.action = m_input.grabAction;
+    //         getInfo.subactionPath = m_input.handSubactionPath[hand];
+    //
+    //         XrActionStateFloat grabValue{XR_TYPE_ACTION_STATE_FLOAT};
+    //         CHECK_XRCMD(xrGetActionStateFloat(m_session, &getInfo, &grabValue));
+    //         if (grabValue.isActive == XR_TRUE) {
+    //             // Scale the rendered hand by 1.0f (open) to 0.5f (fully squeezed).
+    //             m_input.handScale[hand] = 1.0f - 0.5f * grabValue.currentState;
+    //             if (grabValue.currentState > 0.9f) {
+    //                 XrHapticVibration vibration{XR_TYPE_HAPTIC_VIBRATION};
+    //                 vibration.amplitude = 0.5;
+    //                 vibration.duration = XR_MIN_HAPTIC_DURATION;
+    //                 vibration.frequency = XR_FREQUENCY_UNSPECIFIED;
+    //
+    //                 XrHapticActionInfo hapticActionInfo{XR_TYPE_HAPTIC_ACTION_INFO};
+    //                 hapticActionInfo.action = m_input.vibrateAction;
+    //                 hapticActionInfo.subactionPath = m_input.handSubactionPath[hand];
+    //                 CHECK_XRCMD(xrApplyHapticFeedback(m_session, &hapticActionInfo, (XrHapticBaseHeader*)&vibration));
+    //             }
+    //         }
+    //
+    //         getInfo.action = m_input.poseAction;
+    //         XrActionStatePose poseState{XR_TYPE_ACTION_STATE_POSE};
+    //         CHECK_XRCMD(xrGetActionStatePose(m_session, &getInfo, &poseState));
+    //         m_input.handActive[hand] = poseState.isActive;
+    //     }
+    //
+    //     // There were no subaction paths specified for the quit action, because we don't care which hand did it.
+    //     XrActionStateGetInfo getInfo{XR_TYPE_ACTION_STATE_GET_INFO, nullptr, m_input.quitAction, XR_NULL_PATH};
+    //     XrActionStateBoolean quitValue{XR_TYPE_ACTION_STATE_BOOLEAN};
+    //     CHECK_XRCMD(xrGetActionStateBoolean(m_session, &getInfo, &quitValue));
+    //     if ((quitValue.isActive == XR_TRUE) && (quitValue.changedSinceLastSync == XR_TRUE) && (quitValue.currentState == XR_TRUE)) {
+    //         CHECK_XRCMD(xrRequestExitSession(m_session));
+    //     }
+}
+
 // static bool RenderLayer(XrTime predictedDisplayTime, std::vector<XrCompositionLayerProjectionView>& projectionLayerViews,
 //                         XrCompositionLayerProjection& layer) {
 //     XrResult res;
@@ -1046,30 +1104,30 @@ pub fn InitializeSession() void {
 //     layer.views = projectionLayerViews.data();
 //     return true;
 // }
-//
-// void XR_PROG_RenderFrame() {
-//     CHECK(m_session != XR_NULL_HANDLE);
-//
-//     XrFrameWaitInfo frameWaitInfo{XR_TYPE_FRAME_WAIT_INFO};
-//     XrFrameState frameState{XR_TYPE_FRAME_STATE};
-//     CHECK_XRCMD(xrWaitFrame(m_session, &frameWaitInfo, &frameState));
-//
-//     XrFrameBeginInfo frameBeginInfo{XR_TYPE_FRAME_BEGIN_INFO};
-//     CHECK_XRCMD(xrBeginFrame(m_session, &frameBeginInfo));
-//
-//     std::vector<XrCompositionLayerBaseHeader*> layers;
-//     XrCompositionLayerProjection layer{XR_TYPE_COMPOSITION_LAYER_PROJECTION};
-//     std::vector<XrCompositionLayerProjectionView> projectionLayerViews;
-//     if (frameState.shouldRender == XR_TRUE) {
-//         if (RenderLayer(frameState.predictedDisplayTime, projectionLayerViews, layer)) {
-//             layers.push_back(reinterpret_cast<XrCompositionLayerBaseHeader*>(&layer));
-//         }
-//     }
-//
-//     XrFrameEndInfo frameEndInfo{XR_TYPE_FRAME_END_INFO};
-//     frameEndInfo.displayTime = frameState.predictedDisplayTime;
-//     frameEndInfo.environmentBlendMode = m_options->Parsed.EnvironmentBlendMode;
-//     frameEndInfo.layerCount = (uint32_t)layers.size();
-//     frameEndInfo.layers = layers.data();
-//     CHECK_XRCMD(xrEndFrame(m_session, &frameEndInfo));
-// }
+
+pub fn RenderFrame() void {
+    //     CHECK(m_session != XR_NULL_HANDLE);
+    //
+    //     XrFrameWaitInfo frameWaitInfo{XR_TYPE_FRAME_WAIT_INFO};
+    //     XrFrameState frameState{XR_TYPE_FRAME_STATE};
+    //     CHECK_XRCMD(xrWaitFrame(m_session, &frameWaitInfo, &frameState));
+    //
+    //     XrFrameBeginInfo frameBeginInfo{XR_TYPE_FRAME_BEGIN_INFO};
+    //     CHECK_XRCMD(xrBeginFrame(m_session, &frameBeginInfo));
+    //
+    //     std::vector<XrCompositionLayerBaseHeader*> layers;
+    //     XrCompositionLayerProjection layer{XR_TYPE_COMPOSITION_LAYER_PROJECTION};
+    //     std::vector<XrCompositionLayerProjectionView> projectionLayerViews;
+    //     if (frameState.shouldRender == XR_TRUE) {
+    //         if (RenderLayer(frameState.predictedDisplayTime, projectionLayerViews, layer)) {
+    //             layers.push_back(reinterpret_cast<XrCompositionLayerBaseHeader*>(&layer));
+    //         }
+    //     }
+    //
+    //     XrFrameEndInfo frameEndInfo{XR_TYPE_FRAME_END_INFO};
+    //     frameEndInfo.displayTime = frameState.predictedDisplayTime;
+    //     frameEndInfo.environmentBlendMode = m_options->Parsed.EnvironmentBlendMode;
+    //     frameEndInfo.layerCount = (uint32_t)layers.size();
+    //     frameEndInfo.layers = layers.data();
+    //     CHECK_XRCMD(xrEndFrame(m_session, &frameEndInfo));
+}
