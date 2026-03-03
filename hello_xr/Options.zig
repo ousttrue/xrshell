@@ -1,5 +1,5 @@
 const std = @import("std");
-const c = @import("c.zig").openxr;
+const c = @import("gfx/gfxwrapper_opengl_wayland.zig").c;
 const Options = @This();
 
 GraphicsPlugin: FixedString = .init(""),

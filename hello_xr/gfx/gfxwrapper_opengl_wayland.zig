@@ -1,5 +1,13 @@
 const std = @import("std");
-const c = @import("../c.zig").openxr;
+pub const c = @cImport({
+    @cInclude("openxr/openxr.h");
+    @cDefine("XR_USE_PLATFORM_EGL", "1");
+    @cDefine("XR_USE_GRAPHICS_API_OPENGL_ES", "1");
+    @cInclude("glad/gl.h");
+    @cInclude("glad/egl.h");
+    @cInclude("openxr/openxr_platform.h");
+    @cInclude("linux/input.h");
+});
 
 // ================================
 // Platform headers / declarations
@@ -23,6 +31,18 @@ const wl = @cImport({
     @cInclude("unistd.h");
     // @cInclude("xdg-shell-unstable-v6.h");
 });
+
+// Initialize the gl extensions. Note we have to open a window.
+var m_window: ksGpuWindow = .{};
+var m_driverInstance: ksDriverInstance = .{};
+var m_queueInfo: ksGpuQueueInfo = .{};
+var m_colorFormat: ksGpuSurfaceColorFormat = .B8G8R8A8;
+var m_depthFormat: ksGpuSurfaceDepthFormat = .D24;
+var m_sampleCount: ksGpuSampleCount = ._1;
+// https://github.com/WiVRn/WiVRn/issues/526
+// https://projects.blender.org/blender/blender/issues/119901
+// var m_graphicsBinding: c.XrGraphicsBindingOpenGLWaylandKHR = .{ .type = c.XR_TYPE_GRAPHICS_BINDING_OPENGL_WAYLAND_KHR };
+var m_graphicsBinding: c.XrGraphicsBindingEGLMNDX = .{ .type = c.XR_TYPE_GRAPHICS_BINDING_EGL_MNDX, .next = null };
 
 // ================================
 // Common defines
@@ -177,7 +197,7 @@ const ksGpuWindowInput = struct {
     mouseInputY: [8]c_int,
 };
 
-const ksGpuWindow = struct {
+pub const ksGpuWindow = struct {
     device: ksGpuDevice = undefined,
     context: ksGpuContext = undefined,
     colorFormat: ksGpuSurfaceColorFormat = undefined,
@@ -1006,18 +1026,6 @@ fn ksGpuWindow_Destroy(window: *ksGpuWindow) void {
 
 const ksMouseButton = enum(c_int) { MOUSE_LEFT = c.BTN_LEFT, MOUSE_MIDDLE = c.BTN_MIDDLE, MOUSE_RIGHT = c.BTN_RIGHT };
 
-// Initialize the gl extensions. Note we have to open a window.
-var m_window: ksGpuWindow = .{};
-var m_driverInstance: ksDriverInstance = .{};
-var m_queueInfo: ksGpuQueueInfo = .{};
-var m_colorFormat: ksGpuSurfaceColorFormat = .B8G8R8A8;
-var m_depthFormat: ksGpuSurfaceDepthFormat = .D24;
-var m_sampleCount: ksGpuSampleCount = ._1;
-// https://github.com/WiVRn/WiVRn/issues/526
-// https://projects.blender.org/blender/blender/issues/119901
-// XR_TYPE_GRAPHICS_BINDING_EGL_MNDX
-var m_graphicsBinding: c.XrGraphicsBindingOpenGLWaylandKHR = .{ .type = c.XR_TYPE_GRAPHICS_BINDING_OPENGL_WAYLAND_KHR };
-
 pub fn init() void {
     m_window = .{};
     m_driverInstance = (ksDriverInstance){};
@@ -1025,25 +1033,28 @@ pub fn init() void {
     m_colorFormat = .B8G8R8A8;
     m_depthFormat = .D24;
     m_sampleCount = ._1;
-    m_graphicsBinding = .{
-        .type = c.XR_TYPE_GRAPHICS_BINDING_OPENGL_WAYLAND_KHR,
-        .next = null,
-    };
     if (!ksGpuWindow_Create(&m_window, &m_driverInstance, &m_queueInfo, 0, m_colorFormat, m_depthFormat, m_sampleCount, 640, 480, false)) {
         @panic("Unable to create GL context");
     }
 
     // TODO: Just need something other than null here for now (for validation).  Eventually need
     //       to correctly put in a valid pointer to an wl_display
-    m_graphicsBinding.display = @ptrFromInt(0xFFFFFFFF);
-    // m_graphicsBinding.display = @ptrCast(m_window.display);
-    std.log.debug("XrGraphicsBindingOpenGLWaylandKHR", .{});
+    // m_graphicsBinding.display = @ptrFromInt(0xFFFFFFFF);
+    // m_graphicsBinding.display = m_window.display;
+    m_graphicsBinding.getProcAddress = @ptrCast(&eglGetProcAddress);
+    m_graphicsBinding.display = m_window.context.display;
+    m_graphicsBinding.config = m_window.context.config;
+    m_graphicsBinding.context = m_window.context.context;
+}
+
+export fn eglGetProcAddress(name: [*c]const u8) c.PFN_xrEglGetProcAddressMNDX {
+    return @ptrCast(c.eglGetProcAddress(name));
 }
 
 pub fn deinit() void {
     ksGpuWindow_Destroy(&m_window);
 }
 
-pub fn binding() *anyopaque {
-    return &m_graphicsBinding;
+pub fn binding() *c.XrBaseInStructure {
+    return @ptrCast(&m_graphicsBinding);
 }

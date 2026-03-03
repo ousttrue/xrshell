@@ -1,5 +1,4 @@
 const std = @import("std");
-const c = @import("c.zig").openxr;
 const xr_result = @import("xr_result.zig");
 const xr_util = @import("xr_util.zig");
 const CHECK_XRCMD = xr_util.CHECK_XRCMD;
@@ -9,7 +8,8 @@ const CHECK_XRCMD = xr_util.CHECK_XRCMD;
 const Options = @import("Options.zig");
 // #include "platform/platformplugin.h"
 const platformplugin = @import("platform/platformplugin_posix.zig");
-const graphicsplugin = @import("gfx/graphicsplugin_opengl.zig");
+const graphicsplugin = @import("gfx/graphicsplugin_opengles.zig");
+const c = @import("gfx/gfxwrapper_opengl_wayland.zig").c;
 // #include "openxr_program.h"
 // #include <common/xr_linear.h>
 // #include <array>

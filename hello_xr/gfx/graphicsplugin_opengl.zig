@@ -2,20 +2,16 @@ const std = @import("std");
 pub const c = @import("../c.zig").openxr;
 const xr_util = @import("../xr_util.zig");
 const CHECK_XRCMD = xr_util.CHECK_XRCMD;
-// #include "platform/xr_platform_include.h"
-// #include "common.h"
 const geometry = @import("../geometry.zig");
-// #include "graphicsplugin.h"
-// #include "options.h"
-//
-// #include <gfxwrapper_opengl.h>
+const Options = @import("../Options.zig");
 const gfxwrapper_opengl = @import("gfxwrapper_opengl_wayland.zig");
-// #include <common/xr_linear.h>
-//
-// #include <list>
-// #include <vector>
-// #include <map>
-// #include <array>
+
+const extensions = [_][*:0]const u8{
+    c.XR_KHR_OPENGL_ENABLE_EXTENSION_NAME,
+};
+pub fn GetInstanceExtensions() []const [*:0]const u8 {
+    return &extensions;
+}
 
 const VertexShaderGlsl: [*:0]const u8 =
     \\#version 410
@@ -56,51 +52,40 @@ var m_vao: c.GLuint = 0;
 var m_cubeVertexBuffer: c.GLuint = 0;
 var m_cubeIndexBuffer: c.GLuint = 0;
 
-// // Map color buffer to associated depth buffer. This map is populated on demand.
+// Map color buffer to associated depth buffer. This map is populated on demand.
 // std::map<uint32_t, uint32_t> m_colorToDepthMap;
 // std::array<float, 4> m_clearColor;
-//
-// void XR_GFX_init(const Options* options) {
-//     Log::Write(Log::Level::Info, "GFX => OpenGL");
-//     m_clearColor = options->GetBackgroundClearColor();
-// }
-// // OpenGLGraphicsPlugin(const OpenGLGraphicsPlugin&) = delete;
-// // OpenGLGraphicsPlugin& operator=(const OpenGLGraphicsPlugin&) = delete;
-// // OpenGLGraphicsPlugin(OpenGLGraphicsPlugin&&) = delete;
-// // OpenGLGraphicsPlugin& operator=(OpenGLGraphicsPlugin&&) = delete;
-//
-// void XR_GFX_deinit() {
-//     if (m_swapchainFramebuffer != 0) {
-//         glDeleteFramebuffers(1, &m_swapchainFramebuffer);
-//     }
-//     if (m_program != 0) {
-//         glDeleteProgram(m_program);
-//     }
-//     if (m_vao != 0) {
-//         glDeleteVertexArrays(1, &m_vao);
-//     }
-//     if (m_cubeVertexBuffer != 0) {
-//         glDeleteBuffers(1, &m_cubeVertexBuffer);
-//     }
-//     if (m_cubeIndexBuffer != 0) {
-//         glDeleteBuffers(1, &m_cubeIndexBuffer);
-//     }
-//
-//     for (auto& colorToDepth : m_colorToDepthMap) {
-//         if (colorToDepth.second != 0) {
-//             glDeleteTextures(1, &colorToDepth.second);
-//         }
-//     }
-//
-//     gfxwrapper_opengl_deinit();
-// }
 
-const extensions = [_][*:0]const u8{
-    c.XR_KHR_OPENGL_ENABLE_EXTENSION_NAME,
-};
-pub fn GetInstanceExtensions() []const [*:0]const u8 {
-    return &extensions;
-}
+// pub fn init(options: *Options) void {
+//     std.log.info("GFX => OpenGL", .{});
+//     m_clearColor = options.GetBackgroundClearColor();
+// }
+//
+// pub fn deinit() void {
+//     //     if (m_swapchainFramebuffer != 0) {
+//     //         glDeleteFramebuffers(1, &m_swapchainFramebuffer);
+//     //     }
+//     //     if (m_program != 0) {
+//     //         glDeleteProgram(m_program);
+//     //     }
+//     //     if (m_vao != 0) {
+//     //         glDeleteVertexArrays(1, &m_vao);
+//     //     }
+//     //     if (m_cubeVertexBuffer != 0) {
+//     //         glDeleteBuffers(1, &m_cubeVertexBuffer);
+//     //     }
+//     //     if (m_cubeIndexBuffer != 0) {
+//     //         glDeleteBuffers(1, &m_cubeIndexBuffer);
+//     //     }
+//     //
+//     //     for (auto& colorToDepth : m_colorToDepthMap) {
+//     //         if (colorToDepth.second != 0) {
+//     //             glDeleteTextures(1, &colorToDepth.second);
+//     //         }
+//     //     }
+//     //
+//     //     gfxwrapper_opengl_deinit();
+// }
 
 // // #if !defined(XR_USE_PLATFORM_MACOS)
 // // void DebugMessageCallback(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar* message) {
@@ -112,7 +97,7 @@ pub fn GetInstanceExtensions() []const [*:0]const u8 {
 // // }
 // // #endif  // !defined(XR_USE_PLATFORM_MACOS)
 
-fn CheckShader(shader: c.GLuint) void {
+fn checkShader(shader: c.GLuint) void {
     var r: c.GLint = 0;
     c.glGetShaderiv(shader, c.GL_COMPILE_STATUS, &r);
     if (r == c.GL_FALSE) {
@@ -124,7 +109,7 @@ fn CheckShader(shader: c.GLuint) void {
     }
 }
 
-fn CheckProgram(prog: c.GLuint) void {
+fn checkProgram(prog: c.GLuint) void {
     var r: c.GLint = 0;
     c.glGetProgramiv(prog, c.GL_LINK_STATUS, &r);
     if (r == c.GL_FALSE) {
@@ -136,13 +121,13 @@ fn CheckProgram(prog: c.GLuint) void {
     }
 }
 
-fn InitializeResources() void {
+fn initializeResources() void {
     c.glGenFramebuffers(1, &m_swapchainFramebuffer);
 
     const vertexShader = c.glCreateShader(c.GL_VERTEX_SHADER);
     c.glShaderSource(vertexShader, 1, &VertexShaderGlsl, null);
     c.glCompileShader(vertexShader);
-    CheckShader(vertexShader);
+    checkShader(vertexShader);
 
     const fragmentShader = c.glCreateShader(c.GL_FRAGMENT_SHADER);
     c.glShaderSource(fragmentShader, 1, &FragmentShaderGlsl, null);
@@ -153,7 +138,7 @@ fn InitializeResources() void {
     c.glAttachShader(m_program, vertexShader);
     c.glAttachShader(m_program, fragmentShader);
     c.glLinkProgram(m_program);
-    CheckProgram(m_program);
+    checkProgram(m_program);
 
     c.glDeleteShader(vertexShader);
     c.glDeleteShader(fragmentShader);
@@ -211,17 +196,7 @@ pub fn InitializeDevice(instance: c.XrInstance, systemId: c.XrSystemId) void {
         @panic("Runtime does not support desired Graphics API and/or version");
     }
 
-    //     // #if !defined(XR_USE_PLATFORM_MACOS)
-    //     //     glEnable(GL_DEBUG_OUTPUT);
-    //     //     glDebugMessageCallback(
-    //     //         [](GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar* message, const void*
-    //     //         userParam) {
-    //     //             ((OpenGLGraphicsPlugin*)userParam)->DebugMessageCallback(source, type, id, severity, length, message);
-    //     //         },
-    //     //         this);
-    //     // #endif  // !defined(XR_USE_PLATFORM_MACOS)
-
-    InitializeResources();
+    initializeResources();
 }
 
 // int64_t XR_GFX_SelectColorSwapchainFormat(const int64_t* runtimeFormats, size_t len) {

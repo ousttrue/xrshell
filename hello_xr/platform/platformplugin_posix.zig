@@ -1,4 +1,4 @@
-const c = @import("../c.zig").openxr;
+const c = @import("../gfx/gfxwrapper_opengl_wayland.zig").c;
 // #include "platformplugin.h"
 // #include "common.h"
 //

@@ -1,36 +1,39 @@
-const c = @import("c.zig").openxr;
-const XrVector3f = c.XrVector3f;
-
-pub const Vertex = struct {
-    Position: XrVector3f,
-    Color: XrVector3f,
+const Float3 = struct {
+    x: f32 = 0,
+    y: f32 = 0,
+    z: f32 = 0,
 };
 
-const Red = XrVector3f{ .x = 1, .y = 0, .z = 0 };
-const DarkRed = XrVector3f{ .x = 0.25, .y = 0, .z = 0 };
-const Green = XrVector3f{ .x = 0, .y = 1, .z = 0 };
-const DarkGreen = XrVector3f{ .x = 0, .y = 0.25, .z = 0 };
-const Blue = XrVector3f{ .x = 0, .y = 0, .z = 1 };
-const DarkBlue = XrVector3f{ .x = 0, .y = 0, .z = 0.25 };
+pub const Vertex = struct {
+    Position: Float3,
+    Color: Float3,
+};
+
+const Red = Float3{ .x = 1, .y = 0, .z = 0 };
+const DarkRed = Float3{ .x = 0.25, .y = 0, .z = 0 };
+const Green = Float3{ .x = 0, .y = 1, .z = 0 };
+const DarkGreen = Float3{ .x = 0, .y = 0.25, .z = 0 };
+const Blue = Float3{ .x = 0, .y = 0, .z = 1 };
+const DarkBlue = Float3{ .x = 0, .y = 0, .z = 0.25 };
 
 // Vertices for a 1x1x1 meter cube. (Left/Right, Top/Bottom, Front/Back)
-const LBB = XrVector3f{ .x = -0.5, .y = -0.5, .z = -0.5 };
-const LBF = XrVector3f{ .x = -0.5, .y = -0.5, .z = 0.5 };
-const LTB = XrVector3f{ .x = -0.5, .y = 0.5, .z = -0.5 };
-const LTF = XrVector3f{ .x = -0.5, .y = 0.5, .z = 0.5 };
-const RBB = XrVector3f{ .x = 0.5, .y = -0.5, .z = -0.5 };
-const RBF = XrVector3f{ .x = 0.5, .y = -0.5, .z = 0.5 };
-const RTB = XrVector3f{ .x = 0.5, .y = 0.5, .z = -0.5 };
-const RTF = XrVector3f{ .x = 0.5, .y = 0.5, .z = 0.5 };
+const LBB = Float3{ .x = -0.5, .y = -0.5, .z = -0.5 };
+const LBF = Float3{ .x = -0.5, .y = -0.5, .z = 0.5 };
+const LTB = Float3{ .x = -0.5, .y = 0.5, .z = -0.5 };
+const LTF = Float3{ .x = -0.5, .y = 0.5, .z = 0.5 };
+const RBB = Float3{ .x = 0.5, .y = -0.5, .z = -0.5 };
+const RBF = Float3{ .x = 0.5, .y = -0.5, .z = 0.5 };
+const RTB = Float3{ .x = 0.5, .y = 0.5, .z = -0.5 };
+const RTF = Float3{ .x = 0.5, .y = 0.5, .z = 0.5 };
 
 fn CUBE_SIDE(
-    V1: XrVector3f,
-    V2: XrVector3f,
-    V3: XrVector3f,
-    V4: XrVector3f,
-    V5: XrVector3f,
-    V6: XrVector3f,
-    COLOR: XrVector3f,
+    V1: Float3,
+    V2: Float3,
+    V3: Float3,
+    V4: Float3,
+    V5: Float3,
+    V6: Float3,
+    COLOR: Float3,
 ) [6]Vertex {
     return .{
         .{ .Position = V1, .Color = COLOR },
