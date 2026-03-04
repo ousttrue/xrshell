@@ -1,6 +1,7 @@
 const std = @import("std");
 const Options = @import("Options.zig");
 const OpenXrProgram = @import("OpenXrProgram.zig");
+const action = @import("action.zig");
 
 var quitKeyPressed = false;
 
@@ -53,7 +54,7 @@ pub fn main() !void {
             }
 
             if (OpenXrProgram.IsSessionRunning()) {
-                OpenXrProgram.PollActions();
+                action.PollActions();
                 try OpenXrProgram.RenderFrame(allocator);
             } else {
                 // Throttle loop since xrWaitFrame won't be called.
