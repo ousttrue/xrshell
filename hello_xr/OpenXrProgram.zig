@@ -8,7 +8,7 @@ const platformplugin = @import("platform/platformplugin_posix.zig");
 const graphicsplugin = @import("gfx/graphicsplugin_opengles.zig");
 const c = @import("gfx/gfxwrapper_opengl_wayland.zig").c;
 const Cube = @import("Cube.zig");
-const math = @import("math.zig");
+const geometry = @import("geometry.zig");
 const action = @import("action.zig");
 
 var version_str: [64]u8 = undefined;
@@ -361,7 +361,7 @@ fn CreateVisualizedSpaces(allocator: std.mem.Allocator) !void {
     };
 
     for (visualizedSpaces) |visualizedSpace| {
-        const referenceSpaceCreateInfo = math.GetXrReferenceSpaceCreateInfo(visualizedSpace);
+        const referenceSpaceCreateInfo = geometry.GetXrReferenceSpaceCreateInfo(visualizedSpace);
         var space: c.XrSpace = undefined;
         const res = c.xrCreateReferenceSpace(m_session, &referenceSpaceCreateInfo, &space);
         if (c.XR_SUCCEEDED(res)) {
@@ -392,7 +392,7 @@ pub fn InitializeSession(allocator: std.mem.Allocator) !c.XrSession {
     try CreateVisualizedSpaces(allocator);
 
     {
-        const referenceSpaceCreateInfo = math.GetXrReferenceSpaceCreateInfo(m_options.AppSpace.span());
+        const referenceSpaceCreateInfo = geometry.GetXrReferenceSpaceCreateInfo(m_options.AppSpace.span());
         CHECK_XRCMD(@src(), c.xrCreateReferenceSpace(m_session, &referenceSpaceCreateInfo, &m_appSpace));
     }
 
