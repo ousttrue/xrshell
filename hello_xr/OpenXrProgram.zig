@@ -655,8 +655,7 @@ fn RenderLayer(
         .space = m_appSpace,
     };
 
-    const res = c.xrLocateViews(m_session, &viewLocateInfo, &viewState, viewCapacityInput, &viewCountOutput, m_views.items.ptr);
-    CHECK_XRRESULT(@src(), res, "xrLocateViews");
+    CHECK_XRCMD(@src(), c.xrLocateViews(m_session, &viewLocateInfo, &viewState, viewCapacityInput, &viewCountOutput, m_views.items.ptr));
     if ((viewState.viewStateFlags & c.XR_VIEW_STATE_POSITION_VALID_BIT) == 0 or
         (viewState.viewStateFlags & c.XR_VIEW_STATE_ORIENTATION_VALID_BIT) == 0)
     {
@@ -670,43 +669,46 @@ fn RenderLayer(
     try projectionLayerViews.resize(allocator, viewCountOutput);
 
     // For each locatable space that we want to visualize, render a 25cm cube.
-    const cubes: std.ArrayList(Cube) = .{};
-
-    // for (m_visualizedSpaces.items) |visualizedSpace| {
-    //         XrSpaceLocation spaceLocation{XR_TYPE_SPACE_LOCATION};
-    //         res = xrLocateSpace(visualizedSpace, m_appSpace, predictedDisplayTime, &spaceLocation);
-    //         CHECK_XRRESULT(res, "xrLocateSpace");
-    //         if (XR_UNQUALIFIED_SUCCESS(res)) {
-    //             if ((spaceLocation.locationFlags & XR_SPACE_LOCATION_POSITION_VALID_BIT) != 0 &&
-    //                 (spaceLocation.locationFlags & XR_SPACE_LOCATION_ORIENTATION_VALID_BIT) != 0) {
-    //                 cubes.push_back(Cube{spaceLocation.pose, {0.25f, 0.25f, 0.25f}});
-    //             }
-    //         } else {
-    //             Log::Write(Log::Level::Verbose, Fmt("Unable to locate a visualized reference space in app space: %d", res));
-    //         }
-    // }
+    var cubes: std.ArrayList(Cube) = .{};
+    defer cubes.deinit(allocator);
+    for (m_visualizedSpaces.items) |visualizedSpace| {
+        var spaceLocation: c.XrSpaceLocation = .{ .type = c.XR_TYPE_SPACE_LOCATION };
+        const res = c.xrLocateSpace(visualizedSpace, m_appSpace, predictedDisplayTime, &spaceLocation);
+        CHECK_XRCMD(@src(), res);
+        if (c.XR_UNQUALIFIED_SUCCESS(res)) {
+            if ((spaceLocation.locationFlags & c.XR_SPACE_LOCATION_POSITION_VALID_BIT) != 0 and
+                (spaceLocation.locationFlags & c.XR_SPACE_LOCATION_ORIENTATION_VALID_BIT) != 0)
+            {
+                try cubes.append(allocator, .init(spaceLocation.pose, .{ .x = 0.25, .y = 0.25, .z = 0.25 }));
+            }
+        } else {
+            std.log.debug("Unable to locate a visualized reference space in app space: {}", .{res});
+        }
+    }
 
     // Render a 10cm cube scaled by grabAction for each hand. Note renderHand will only be
     // true when the application has focus.
-    //     for (auto hand : {Side::LEFT, Side::RIGHT}) {
-    //         XrSpaceLocation spaceLocation{XR_TYPE_SPACE_LOCATION};
-    //         res = xrLocateSpace(m_input.handSpace[hand], m_appSpace, predictedDisplayTime, &spaceLocation);
-    //         CHECK_XRRESULT(res, "xrLocateSpace");
-    //         if (XR_UNQUALIFIED_SUCCESS(res)) {
-    //             if ((spaceLocation.locationFlags & XR_SPACE_LOCATION_POSITION_VALID_BIT) != 0 &&
-    //                 (spaceLocation.locationFlags & XR_SPACE_LOCATION_ORIENTATION_VALID_BIT) != 0) {
-    //                 float scale = 0.1f * m_input.handScale[hand];
-    //                 cubes.push_back(Cube{spaceLocation.pose, {scale, scale, scale}});
-    //             }
-    //         } else {
-    //             // Tracking loss is expected when the hand is not active so only log a message
-    //             // if the hand is active.
-    //             if (m_input.handActive[hand] == XR_TRUE) {
-    //                 const char* handName[] = {"left", "right"};
-    //                 Log::Write(Log::Level::Verbose, Fmt("Unable to locate %s hand action space in app space: %d", handName[hand], res));
-    //             }
-    //         }
-    //     }
+    const hands = [2]usize{ action.Side.LEFT, action.Side.RIGHT };
+    for (hands) |hand| {
+        var spaceLocation: c.XrSpaceLocation = .{ .type = c.XR_TYPE_SPACE_LOCATION };
+        const res = c.xrLocateSpace(action.m_input.handSpace[hand], m_appSpace, predictedDisplayTime, &spaceLocation);
+        CHECK_XRRESULT(@src(), res, "xrLocateSpace");
+        if (c.XR_UNQUALIFIED_SUCCESS(res)) {
+            if ((spaceLocation.locationFlags & c.XR_SPACE_LOCATION_POSITION_VALID_BIT) != 0 and
+                (spaceLocation.locationFlags & c.XR_SPACE_LOCATION_ORIENTATION_VALID_BIT) != 0)
+            {
+                const scale = 0.1 * action.m_input.handScale[hand];
+                try cubes.append(allocator, .init(spaceLocation.pose, .{ .x = scale, .y = scale, .z = scale }));
+            }
+        } else {
+            // Tracking loss is expected when the hand is not active so only log a message
+            // if the hand is active.
+            if (action.m_input.handActive[hand] == c.XR_TRUE) {
+                const handName = [2][]const u8{ "left", "right" };
+                std.log.debug("Unable to locate {s} hand action space in app space: {}", .{ handName[hand], res });
+            }
+        }
+    }
 
     // Render view to the appropriate part of the swapchain image.
     for (m_swapchains.items, 0..) |viewSwapchain, i| {

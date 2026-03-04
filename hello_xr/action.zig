@@ -2,9 +2,9 @@ const std = @import("std");
 const c = @import("gfx/gfxwrapper_opengl_wayland.zig").c;
 
 pub const Side = struct {
-    const LEFT = 0;
-    const RIGHT = 1;
-    const COUNT = 2;
+    pub const LEFT = 0;
+    pub const RIGHT = 1;
+    pub const COUNT = 2;
 };
 
 pub const InputState = struct {
@@ -14,12 +14,12 @@ pub const InputState = struct {
     // XrAction vibrateAction{XR_NULL_HANDLE};
     // XrAction quitAction{XR_NULL_HANDLE};
     // std::array<XrPath, Side::COUNT> handSubactionPath;
-    // std::array<XrSpace, Side::COUNT> handSpace;
-    // std::array<float, Side::COUNT> handScale = {{1.0f, 1.0f}};
+    handSpace: [Side.COUNT]c.XrSpace = undefined,
+    handScale: [Side.COUNT]f32 = .{ 1.0, 1.0 },
     handActive: [Side.COUNT]c.XrBool32 = undefined,
 };
 
-var m_input = InputState;
+pub var m_input: InputState = .{};
 
 pub fn init() void {}
 
@@ -305,5 +305,3 @@ pub fn PollActions() void {
     //         CHECK_XRCMD(xrRequestExitSession(m_session));
     //     }
 }
-
-
