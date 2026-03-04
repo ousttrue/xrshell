@@ -35,19 +35,25 @@ const zbk = @import("zbk");
 //     "logger.cpp",
 //     // "openxr_program.cpp",
 // };
-//
-// const LIBS = [_][]const u8{
-//     // "wayland-cursor",
-//     // "EGL",
-//     // "GLESv2",
-//     "wayland-client",
-//     "wayland-egl",
-//     // "X11-xcb",
-//     // "xcb",
-//     // "xcb-randr",
-//     // "xcb-xkb",
-//     // "xcb-keysyms",
-// };
+
+const LIBS_WINDOWS = [_][]const u8{
+    "gdi32",
+    "kernel32",
+    "opengl32",
+};
+
+const LIBS_WAYLAND = [_][]const u8{
+    // "wayland-cursor",
+    // "EGL",
+    // "GLESv2",
+    "wayland-client",
+    "wayland-egl",
+    // "X11-xcb",
+    // "xcb",
+    // "xcb-randr",
+    // "xcb-xkb",
+    // "xcb-keysyms",
+};
 
 pub fn build(b: *std.Build) !void {
     var targets = std.ArrayListUnmanaged(*std.Build.Step.Compile){};
@@ -112,13 +118,15 @@ pub fn build(b: *std.Build) !void {
     const glad = try build_glad(b, target, optimize, b.path("glad2"));
     exe.linkLibrary(glad);
 
-    //     // const gfx = build_gfxwrapper_opengl(b, target, optimize, b.path("gfx"));
-    //     // gfx.linkLibrary(glad);
-    //     // exe.linkLibrary(gfx);
-    //
-    //     for (LIBS) |lib| {
-    //         exe.linkSystemLibrary(lib);
-    //     }
+    if (target.result.os.tag == .windows) {
+        for (LIBS_WINDOWS) |lib| {
+            exe.linkSystemLibrary(lib);
+        }
+    } else {
+        for (LIBS_WAYLAND) |lib| {
+            exe.linkSystemLibrary(lib);
+        }
+    }
 
     //     // exe.addIncludePath(wayland_scanner(
     //     //     b,

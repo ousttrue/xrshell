@@ -4,7 +4,7 @@ const xr_util = @import("../xr_util.zig");
 const CHECK_XRCMD = xr_util.CHECK_XRCMD;
 const geometry = @import("../geometry.zig");
 const Options = @import("../Options.zig");
-const gfxwrapper_opengl = @import("gfxwrapper_opengl.zig");
+const gfxwrapper_opengl = @import("gfxwrapper_opengl_win32.zig");
 const Cube = @import("../Cube.zig");
 
 const extensions = [_][*:0]const u8{
@@ -64,7 +64,11 @@ pub fn init(allocator: std.mem.Allocator, options: *Options) void {
 }
 
 pub fn deinit(allocator: std.mem.Allocator) void {
-    _ = allocator;
+    for (m_swapchainImageBuffers.items) |buf| {
+        allocator.free(buf);
+    }
+    m_swapchainImageBuffers.deinit(allocator);
+
     //     if (m_swapchainFramebuffer != 0) {
     //         glDeleteFramebuffers(1, &m_swapchainFramebuffer);
     //     }
