@@ -43,18 +43,18 @@ pub fn main() !void {
         options.SetEnvironmentBlendMode(try OpenXrProgram.GetPreferredBlendMode(allocator));
 
         try OpenXrProgram.InitializeDevice(allocator);
-        try OpenXrProgram.InitializeSession(allocator);
+        const session = try OpenXrProgram.InitializeSession(allocator);
         try OpenXrProgram.CreateSwapchains(allocator);
 
         while (!quitKeyPressed) {
             var exitRenderLoop = false;
-            OpenXrProgram.PollEvents(&exitRenderLoop, &requestRestart);
+            try OpenXrProgram.PollEvents(allocator, &exitRenderLoop, &requestRestart);
             if (exitRenderLoop) {
                 break;
             }
 
             if (OpenXrProgram.IsSessionRunning()) {
-                action.PollActions();
+                action.PollActions(session);
                 try OpenXrProgram.RenderFrame(allocator);
             } else {
                 // Throttle loop since xrWaitFrame won't be called.

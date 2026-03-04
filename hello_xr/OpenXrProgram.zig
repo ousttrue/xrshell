@@ -372,7 +372,7 @@ fn CreateVisualizedSpaces(allocator: std.mem.Allocator) !void {
     }
 }
 
-pub fn InitializeSession(allocator: std.mem.Allocator) !void {
+pub fn InitializeSession(allocator: std.mem.Allocator) !c.XrSession {
     std.debug.assert(m_instance != null);
     std.debug.assert(m_session == null);
 
@@ -388,13 +388,15 @@ pub fn InitializeSession(allocator: std.mem.Allocator) !void {
     }
 
     try LogReferenceSpaces(allocator);
-    // InitializeActions();
+    try action.InitializeActions(m_instance, m_session);
     try CreateVisualizedSpaces(allocator);
 
     {
         const referenceSpaceCreateInfo = math.GetXrReferenceSpaceCreateInfo(m_options.AppSpace.span());
         CHECK_XRCMD(@src(), c.xrCreateReferenceSpace(m_session, &referenceSpaceCreateInfo, &m_appSpace));
     }
+
+    return m_session;
 }
 
 pub fn CreateSwapchains(allocator: std.mem.Allocator) !void {
@@ -599,7 +601,11 @@ fn HandleSessionStateChangedEvent(
     }
 }
 
-pub fn PollEvents(exitRenderLoop: *bool, requestRestart: *bool) void {
+pub fn PollEvents(
+    allocator: std.mem.Allocator,
+    exitRenderLoop: *bool,
+    requestRestart: *bool,
+) !void {
     exitRenderLoop.* = false;
     requestRestart.* = false;
 
@@ -618,10 +624,7 @@ pub fn PollEvents(exitRenderLoop: *bool, requestRestart: *bool) void {
                 HandleSessionStateChangedEvent(sessionStateChangedEvent, exitRenderLoop, requestRestart);
             },
             c.XR_TYPE_EVENT_DATA_INTERACTION_PROFILE_CHANGED => {
-                // LogActionSourceName(m_input.grabAction, "Grab");
-                // LogActionSourceName(m_input.quitAction, "Quit");
-                // LogActionSourceName(m_input.poseAction, "Pose");
-                // LogActionSourceName(m_input.vibrateAction, "Vibrate");
+                try action.LogEvent(allocator, m_session);
             },
             // case XR_TYPE_EVENT_DATA_REFERENCE_SPACE_CHANGE_PENDING:
             else => {
@@ -688,27 +691,27 @@ fn RenderLayer(
 
     // Render a 10cm cube scaled by grabAction for each hand. Note renderHand will only be
     // true when the application has focus.
-    // const hands = [2]usize{ action.Side.LEFT, action.Side.RIGHT };
-    // for (hands) |hand| {
-    //     var spaceLocation: c.XrSpaceLocation = .{ .type = c.XR_TYPE_SPACE_LOCATION };
-    //     const res = c.xrLocateSpace(action.m_input.handSpace[hand], m_appSpace, predictedDisplayTime, &spaceLocation);
-    //     CHECK_XRRESULT(@src(), res, "xrLocateSpace");
-    //     if (c.XR_UNQUALIFIED_SUCCESS(res)) {
-    //         if ((spaceLocation.locationFlags & c.XR_SPACE_LOCATION_POSITION_VALID_BIT) != 0 and
-    //             (spaceLocation.locationFlags & c.XR_SPACE_LOCATION_ORIENTATION_VALID_BIT) != 0)
-    //         {
-    //             const scale = 0.1 * action.m_input.handScale[hand];
-    //             try cubes.append(allocator, .init(spaceLocation.pose, .{ .x = scale, .y = scale, .z = scale }));
-    //         }
-    //     } else {
-    //         // Tracking loss is expected when the hand is not active so only log a message
-    //         // if the hand is active.
-    //         if (action.m_input.handActive[hand] == c.XR_TRUE) {
-    //             const handName = [2][]const u8{ "left", "right" };
-    //             std.log.debug("Unable to locate {s} hand action space in app space: {}", .{ handName[hand], res });
-    //         }
-    //     }
-    // }
+    const hands = [2]usize{ action.Side.LEFT, action.Side.RIGHT };
+    for (hands) |hand| {
+        var spaceLocation: c.XrSpaceLocation = .{ .type = c.XR_TYPE_SPACE_LOCATION };
+        const res = c.xrLocateSpace(action.m_input.handSpace[hand], m_appSpace, predictedDisplayTime, &spaceLocation);
+        CHECK_XRRESULT(@src(), res, "xrLocateSpace");
+        if (c.XR_UNQUALIFIED_SUCCESS(res)) {
+            if ((spaceLocation.locationFlags & c.XR_SPACE_LOCATION_POSITION_VALID_BIT) != 0 and
+                (spaceLocation.locationFlags & c.XR_SPACE_LOCATION_ORIENTATION_VALID_BIT) != 0)
+            {
+                const scale = 0.1 * action.m_input.handScale[hand];
+                try cubes.append(allocator, .init(spaceLocation.pose, .{ .x = scale, .y = scale, .z = scale }));
+            }
+        } else {
+            // Tracking loss is expected when the hand is not active so only log a message
+            // if the hand is active.
+            if (action.m_input.handActive[hand] == c.XR_TRUE) {
+                const handName = [2][]const u8{ "left", "right" };
+                std.log.debug("Unable to locate {s} hand action space in app space: {}", .{ handName[hand], res });
+            }
+        }
+    }
 
     // Render view to the appropriate part of the swapchain image.
     for (m_swapchains.items, 0..) |viewSwapchain, i| {
