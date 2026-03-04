@@ -1,4 +1,4 @@
-const c = @import("../c.zig").openxr;
+const c = @import("c");
 // #include "gfxwrapper_opengl.h"
 // #include "EGL/eglplatform.h"
 // #include "glad/egl.h"
@@ -3449,13 +3449,13 @@ const c = @import("../c.zig").openxr;
 // ksGpuSurfaceDepthFormat depthFormat;  //{KS_GPU_SURFACE_DEPTH_FORMAT_D24};
 // ksGpuSampleCount sampleCount;         //{KS_GPU_SAMPLE_COUNT_1};
 // #ifdef XR_USE_PLATFORM_WIN32
-// XrGraphicsBindingOpenGLWin32KHR m_graphicsBinding;  //{XR_TYPE_GRAPHICS_BINDING_OPENGL_WIN32_KHR};
+var m_graphicsBinding: c.XrGraphicsBindingOpenGLWin32KHR = .{ .type = c.XR_TYPE_GRAPHICS_BINDING_OPENGL_WIN32_KHR };
 // #elif defined(XR_USE_PLATFORM_XLIB)
 // XrGraphicsBindingOpenGLXlibKHR m_graphicsBinding;  //{XR_TYPE_GRAPHICS_BINDING_OPENGL_XLIB_KHR};
 // #elif defined(XR_USE_PLATFORM_XCB)
 // XrGraphicsBindingOpenGLXcbKHR m_graphicsBinding;  //{XR_TYPE_GRAPHICS_BINDING_OPENGL_XCB_KHR};
 // #elif defined(XR_USE_PLATFORM_WAYLAND)
-var m_graphicsBinding: c.XrGraphicsBindingOpenGLWaylandKHR = .{ .type = c.XR_TYPE_GRAPHICS_BINDING_OPENGL_WAYLAND_KHR };
+// var m_graphicsBinding: c.XrGraphicsBindingOpenGLWaylandKHR = .{ .type = c.XR_TYPE_GRAPHICS_BINDING_OPENGL_WAYLAND_KHR };
 // #elif defined(XR_USE_PLATFORM_MACOS)
 // #error OpenGL bindings for Mac have not been implemented
 // #else

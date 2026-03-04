@@ -1,4 +1,4 @@
-const c = @import("gfxwrapper_opengl_wayland.zig").c;
+const c = @import("c");
 // #define MATH_PI 3.14159265358979323846f
 //
 // #define DEFAULT_NEAR_Z 0.015625f  // exact floating point representation

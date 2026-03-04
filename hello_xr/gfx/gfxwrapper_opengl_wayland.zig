@@ -1,13 +1,5 @@
 const std = @import("std");
-pub const c = @cImport({
-    @cInclude("openxr/openxr.h");
-    @cDefine("XR_USE_PLATFORM_EGL", "1");
-    @cDefine("XR_USE_GRAPHICS_API_OPENGL_ES", "1");
-    @cInclude("glad/gl.h");
-    @cInclude("glad/egl.h");
-    @cInclude("openxr/openxr_platform.h");
-    @cInclude("linux/input.h");
-});
+
 
 // ================================
 // Platform headers / declarations

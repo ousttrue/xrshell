@@ -1,5 +1,5 @@
 const std = @import("std");
-const c = @import("gfx/gfxwrapper_opengl_wayland.zig").c;
+const c = @import("c");
 const xr_result = @import("xr_result.zig");
 
 pub fn to_string(res: c.XrResult) []const u8 {

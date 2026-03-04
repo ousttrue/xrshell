@@ -1,5 +1,5 @@
 const std = @import("std");
-const c = @import("gfx/gfxwrapper_opengl_wayland.zig").c;
+const c = @import("c");
 
 const Float3 = struct {
     x: f32 = 0,

@@ -1,6 +1,7 @@
 const std = @import("std");
-const c = @import("gfx/gfxwrapper_opengl_wayland.zig").c;
-const xr_util = @import("xr_util.zig");
+const c = @import("c");
+const binding = @import("binding.zig");
+const xr_util = binding.xr_util;
 const CHECK_XRCMD = xr_util.CHECK_XRCMD;
 const CHECK_XRRESULT = xr_util.CHECK_XRRESULT;
 

@@ -1,4 +1,4 @@
-const c = @import("gfx/gfxwrapper_opengl_wayland.zig").c;
+const c = @import("c");
 
 Pose: c.XrPosef,
 Scale: c.XrVector3f,

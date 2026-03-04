@@ -1,63 +1,60 @@
 const std = @import("std");
-const zbk = @import("zbk");
 const zcc = @import("compile_commands");
+const zbk = @import("zbk");
 
-const GFX_FLAGS = [_][]const u8{
-    // "-DOS_LINUX_XCB",
-    "-DOS_LINUX_XCB_GLX",
-    // "-DOS_LINUX_WAYLAND",
-    "-DXR_USE_GRAPHICS_API_OPENGL",
-};
+// const GFX_FLAGS = [_][]const u8{
+//     // "-DOS_LINUX_XCB",
+//     "-DOS_LINUX_XCB_GLX",
+//     // "-DOS_LINUX_WAYLAND",
+//     "-DXR_USE_GRAPHICS_API_OPENGL",
+// };
+//
+// const XR_FLAGS = [_][]const u8{
+//     "-DXR_OS_LINUX",
+//     "-DXR_USE_PLATFORM_XCB",
+//     // "-DXR_USE_PLATFORM_WAYLAND",
+//     // "-DXR_USE_GRAPHICS_API_OPENGL_ES",
+//     "-DXR_USE_GRAPHICS_API_OPENGL",
+// };
+//
+// const XR_SRCS = [_][]const u8{
+//     // "platformplugin_android.cpp",
+//     // "platform/platformplugin_posix.cpp",
+//     // "platformplugin_win32.cpp",
+//     // "platform/platformplugin_factory.cpp",
+//
+//     // "d3d_common.cpp",
+//     // "graphicsplugin_d3d11.cpp",
+//     // "graphicsplugin_d3d12.cpp",
+//     // "gfx/graphicsplugin_opengl.cpp",
+//     // "graphicsplugin_opengles.cpp",
+//     // "graphicsplugin_vulkan.cpp",
+//     // "graphicsplugin_metal.cpp",
+//     // "gfx/graphicsplugin_factory.cpp",
+//
+//     "logger.cpp",
+//     // "openxr_program.cpp",
+// };
+//
+// const LIBS = [_][]const u8{
+//     // "wayland-cursor",
+//     // "EGL",
+//     // "GLESv2",
+//     "wayland-client",
+//     "wayland-egl",
+//     // "X11-xcb",
+//     // "xcb",
+//     // "xcb-randr",
+//     // "xcb-xkb",
+//     // "xcb-keysyms",
+// };
 
-const XR_FLAGS = [_][]const u8{
-    "-DXR_OS_LINUX",
-    "-DXR_USE_PLATFORM_XCB",
-    // "-DXR_USE_PLATFORM_WAYLAND",
-    // "-DXR_USE_GRAPHICS_API_OPENGL_ES",
-    "-DXR_USE_GRAPHICS_API_OPENGL",
-};
-
-const XR_SRCS = [_][]const u8{
-    // "platformplugin_android.cpp",
-    // "platform/platformplugin_posix.cpp",
-    // "platformplugin_win32.cpp",
-    // "platform/platformplugin_factory.cpp",
-
-    // "d3d_common.cpp",
-    // "graphicsplugin_d3d11.cpp",
-    // "graphicsplugin_d3d12.cpp",
-    // "gfx/graphicsplugin_opengl.cpp",
-    // "graphicsplugin_opengles.cpp",
-    // "graphicsplugin_vulkan.cpp",
-    // "graphicsplugin_metal.cpp",
-    // "gfx/graphicsplugin_factory.cpp",
-
-    "logger.cpp",
-    // "openxr_program.cpp",
-};
-
-const LIBS = [_][]const u8{
-    // "wayland-cursor",
-    // "EGL",
-    // "GLESv2",
-    "wayland-client",
-    "wayland-egl",
-    // "X11-xcb",
-    // "xcb",
-    // "xcb-randr",
-    // "xcb-xkb",
-    // "xcb-keysyms",
-};
-
-pub fn build(b: *std.Build) void {
+pub fn build(b: *std.Build) !void {
     var targets = std.ArrayListUnmanaged(*std.Build.Step.Compile){};
 
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
-    // const mod = b.addModule("hello_xr", .{
-    //     .root_source_file = b.path("src/root.zig"),
-    //     .target = target,
-    // });
+    std.log.info("{s}({s})", .{ try target.result.linuxTriple(b.allocator), @tagName(optimize) });
 
     const exe = b.addExecutable(.{
         .name = "hello_xr",
@@ -70,120 +67,139 @@ pub fn build(b: *std.Build) void {
             // },
             .link_libcpp = true,
         }),
-        // .use_llvm = true,
+        .use_llvm = true,
     });
     targets.append(b.allocator, exe) catch @panic("OOM");
-    exe.addCSourceFiles(.{
-        .files = &XR_SRCS,
-        .flags = &(XR_FLAGS ++ GFX_FLAGS),
-    });
-    exe.addIncludePath(b.path(""));
+    b.installArtifact(exe);
 
     const openxr_dep = b.dependency("openxr", .{});
-    exe.addIncludePath(openxr_dep.path("include"));
-    // const zbk_dep = b.dependency("zbk", .{
-    //     .openxr = openxr_dep.path(""),
-    // });
     const openxr_loader = zbk.cpp.CMakeStep.create(b, .{
         .source = openxr_dep.path("").getPath(b),
         .use_vcenv = target.result.os.tag == .windows,
-        // .args = &.{"-DDYNAMIC_LOADER=ON"},
+        .args = if (target.result.os.tag == .windows) &.{"-DDYNAMIC_LOADER=ON"} else &.{},
     });
+
+    // copy dll
+    const dll = b.addInstallBinFile(
+        openxr_loader.getInstallPrefix().path(b, "bin/openxr_loader.dll"),
+        "openxr_loader.dll",
+    );
+    b.getInstallStep().dependOn(&dll.step);
+
+    const t = b.addTranslateC(.{
+        .target = target,
+        .optimize = optimize,
+        .root_source_file = b.path(if (target.result.os.tag == .windows)
+            "c_windows.h"
+        else
+            "c_linux.h"),
+    });
+    t.addIncludePath(openxr_dep.path("include"));
+    t.addIncludePath(b.path("glad2/include"));
+
+    const c_mod = t.createModule();
+    exe.root_module.addImport("c", c_mod);
+
     exe.addLibraryPath(openxr_loader.getInstallPrefix().path(b, "lib"));
     exe.linkSystemLibrary("openxr_loader");
+
+    //     exe.addCSourceFiles(.{
+    //         .files = &XR_SRCS,
+    //         .flags = &(XR_FLAGS ++ GFX_FLAGS),
+    //     });
+    //     exe.addIncludePath(b.path(""));
 
     const glad = try build_glad(b, target, optimize, b.path("glad2"));
     exe.linkLibrary(glad);
 
-    // const gfx = build_gfxwrapper_opengl(b, target, optimize, b.path("gfx"));
-    // gfx.linkLibrary(glad);
-    // exe.linkLibrary(gfx);
-
-    for (LIBS) |lib| {
-        exe.linkSystemLibrary(lib);
-    }
-
-    b.installArtifact(exe);
-
-    // exe.addIncludePath(wayland_scanner(
-    //     b,
-    //     &.{ "client-header", "/usr/share/wayland-protocols/unstable/xdg-shell/xdg-shell-unstable-v6.xml" },
-    //     "xdg-shell-unstable-v6.h",
-    // ).dirname());
-    // exe.addCSourceFile(.{
-    //     .file = wayland_scanner(
-    //         b,
-    //         &.{ "public-code", "/usr/share/wayland-protocols/unstable/xdg-shell/xdg-shell-unstable-v6.xml" },
-    //         "xdg-shell-unstable-v6.c",
-    //     ),
-    // });
-
+    //     // const gfx = build_gfxwrapper_opengl(b, target, optimize, b.path("gfx"));
+    //     // gfx.linkLibrary(glad);
+    //     // exe.linkLibrary(gfx);
     //
+    //     for (LIBS) |lib| {
+    //         exe.linkSystemLibrary(lib);
+    //     }
+
+    //     // exe.addIncludePath(wayland_scanner(
+    //     //     b,
+    //     //     &.{ "client-header", "/usr/share/wayland-protocols/unstable/xdg-shell/xdg-shell-unstable-v6.xml" },
+    //     //     "xdg-shell-unstable-v6.h",
+    //     // ).dirname());
+    //     // exe.addCSourceFile(.{
+    //     //     .file = wayland_scanner(
+    //     //         b,
+    //     //         &.{ "public-code", "/usr/share/wayland-protocols/unstable/xdg-shell/xdg-shell-unstable-v6.xml" },
+    //     //         "xdg-shell-unstable-v6.c",
+    //     //     ),
+    //     // });
     //
+    //     //
+    //     //
+    //     //
+    //     const run_step = b.step("run", "Run the app");
     //
-    const run_step = b.step("run", "Run the app");
+    //     const run_cmd = b.addRunArtifact(exe);
+    //     run_step.dependOn(&run_cmd.step);
+    //
+    //     run_cmd.step.dependOn(b.getInstallStep());
+    //
+    //     if (b.args) |args| {
+    //         run_cmd.addArgs(args);
+    //     }
+    //
+    //     // const mod_tests = b.addTest(.{
+    //     //     .root_module = mod,
+    //     // });
+    //     // const run_mod_tests = b.addRunArtifact(mod_tests);
+    //
+    //     const exe_tests = b.addTest(.{
+    //         .root_module = exe.root_module,
+    //     });
+    //
+    //     const run_exe_tests = b.addRunArtifact(exe_tests);
+    //
+    //     const test_step = b.step("test", "Run tests");
+    //     // test_step.dependOn(&run_mod_tests.step);
+    //     test_step.dependOn(&run_exe_tests.step);
 
-    const run_cmd = b.addRunArtifact(exe);
-    run_step.dependOn(&run_cmd.step);
-
-    run_cmd.step.dependOn(b.getInstallStep());
-
-    if (b.args) |args| {
-        run_cmd.addArgs(args);
-    }
-
-    // const mod_tests = b.addTest(.{
-    //     .root_module = mod,
-    // });
-    // const run_mod_tests = b.addRunArtifact(mod_tests);
-
-    const exe_tests = b.addTest(.{
-        .root_module = exe.root_module,
-    });
-
-    const run_exe_tests = b.addRunArtifact(exe_tests);
-
-    const test_step = b.step("test", "Run tests");
-    // test_step.dependOn(&run_mod_tests.step);
-    test_step.dependOn(&run_exe_tests.step);
-
-    exe.step.dependOn(zcc.createStep(b, "cdb", targets.toOwnedSlice(b.allocator) catch @panic("OOM")));
+    const zcc_step = zcc.createStep(b, "cdb", targets.toOwnedSlice(b.allocator) catch @panic("OOM"));
+    exe.step.dependOn(zcc_step);
 }
 
-fn build_gfxwrapper_opengl(
-    b: *std.Build,
-    target: std.Build.ResolvedTarget,
-    optimize: std.builtin.OptimizeMode,
-    root: std.Build.LazyPath,
-) *std.Build.Step.Compile {
-    const name = "gfxwrapper_opengl";
-    const lib = b.addLibrary(.{
-        .name = name,
-        .root_module = b.addModule(name, .{
-            .target = target,
-            .optimize = optimize,
-        }),
-    });
-    lib.addCSourceFiles(.{
-        .root = root,
-        .files = &.{
-            "gfxwrapper_opengl.c",
-        },
-        .flags = &GFX_FLAGS,
-    });
-    lib.installHeader(root.path(b, "gfxwrapper_opengl.h"), "gfxwrapper_opengl.h");
-    return lib;
-}
-
-fn wayland_scanner(
-    b: *std.Build,
-    args: []const []const u8,
-    output: []const u8,
-) std.Build.LazyPath {
-    const run = b.addSystemCommand(&.{"wayland-scanner"});
-    run.addArgs(args);
-    return run.addOutputFileArg(output);
-}
+// fn build_gfxwrapper_opengl(
+//     b: *std.Build,
+//     target: std.Build.ResolvedTarget,
+//     optimize: std.builtin.OptimizeMode,
+//     root: std.Build.LazyPath,
+// ) *std.Build.Step.Compile {
+//     const name = "gfxwrapper_opengl";
+//     const lib = b.addLibrary(.{
+//         .name = name,
+//         .root_module = b.addModule(name, .{
+//             .target = target,
+//             .optimize = optimize,
+//         }),
+//     });
+//     lib.addCSourceFiles(.{
+//         .root = root,
+//         .files = &.{
+//             "gfxwrapper_opengl.c",
+//         },
+//         .flags = &GFX_FLAGS,
+//     });
+//     lib.installHeader(root.path(b, "gfxwrapper_opengl.h"), "gfxwrapper_opengl.h");
+//     return lib;
+// }
+//
+// fn wayland_scanner(
+//     b: *std.Build,
+//     args: []const []const u8,
+//     output: []const u8,
+// ) std.Build.LazyPath {
+//     const run = b.addSystemCommand(&.{"wayland-scanner"});
+//     run.addArgs(args);
+//     return run.addOutputFileArg(output);
+// }
 
 pub fn build_glad(
     b: *std.Build,
@@ -191,11 +207,6 @@ pub fn build_glad(
     optimize: std.builtin.OptimizeMode,
     src: std.Build.LazyPath,
 ) !*std.Build.Step.Compile {
-    // const t = b.addTranslateC(.{
-    //     .root_source_file = src.path(b, "include/glad/gl.h"),
-    //     .target = target,
-    //     .optimize = optimize,
-    // });
     const lib = b.addLibrary(.{
         .name = "glad2",
         // .root_module = t.createModule(),
@@ -206,13 +217,22 @@ pub fn build_glad(
         }),
         // .use_llvm = true,
     });
+    const srcs = [_][]const u8{
+        "gl.c",
+    };
+    const srcs_windows = [_][]const u8{
+        "wgl.c",
+    };
+    const srcs_linux = [_][]const u8{
+        "egl.c",
+        "glx.c",
+    };
     lib.addCSourceFiles(.{
         .root = src.path(b, "src"),
-        .files = &.{
-            "gl.c",
-            "glx.c",
-            "egl.c",
-        },
+        .files = &(if (target.result.os.tag == .windows)
+            srcs ++ srcs_windows
+        else
+            srcs ++ srcs_linux),
     });
     lib.addIncludePath(src.path(b, "include"));
     lib.installHeadersDirectory(src.path(b, "include/glad"), "glad", .{});

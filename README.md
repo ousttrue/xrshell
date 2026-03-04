@@ -1,5 +1,7 @@
 # xrshell
 
+`zig-0.15.2`
+
 `OpenXR-1.0,57`
 
 | env                | runtime      | extension                         | binding                  |

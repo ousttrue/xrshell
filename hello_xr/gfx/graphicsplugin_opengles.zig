@@ -7,7 +7,7 @@ const Options = @import("../Options.zig");
 const xr_linear = @import("xr_linear.zig");
 
 const gfxwrapper_opengl = @import("gfxwrapper_opengl_wayland.zig");
-const c = gfxwrapper_opengl.c;
+const c = @import("c");
 
 var m_swapchainImageBuffers: std.ArrayList([]c.XrSwapchainImageOpenGLESKHR) = .{};
 var m_swapchainFramebuffer: c.GLuint = 0;
