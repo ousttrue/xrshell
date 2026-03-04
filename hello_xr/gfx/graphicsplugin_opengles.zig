@@ -4,6 +4,7 @@ const CHECK_XRCMD = xr_util.CHECK_XRCMD;
 const geometry = @import("../geometry.zig");
 const Cube = @import("../Cube.zig");
 const Options = @import("../Options.zig");
+const xr_linear = @import("xr_linear.zig");
 
 const gfxwrapper_opengl = @import("gfxwrapper_opengl_wayland.zig");
 const c = gfxwrapper_opengl.c;
@@ -84,6 +85,7 @@ pub fn deinit(allocator: std.mem.Allocator) void {
     for (m_swapchainImageBuffers.items) |item| {
         allocator.free(item);
     }
+
     m_swapchainImageBuffers.deinit(allocator);
     //         if (m_swapchainFramebuffer != 0) {
     //             glDeleteFramebuffers(1, &m_swapchainFramebuffer);
@@ -110,8 +112,6 @@ pub fn deinit(allocator: std.mem.Allocator) void {
     //         ksGpuWindow_Destroy(&window);
 }
 
-//     ksGpuWindow window{};
-//
 //     void DebugMessageCallback(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar* message) {
 //         (void)source;
 //         (void)type;
@@ -260,7 +260,6 @@ pub fn AllocateSwapchainImageStructs(
     for (swapchainImageBuffer) |*buf| {
         buf.* = .{ .type = c.XR_TYPE_SWAPCHAIN_IMAGE_OPENGL_ES_KHR };
     }
-    // std::vector<XrSwapchainImageBaseHeader*> swapchainImageBase;
     for (swapchainImageBuffer, 0..) |*image, i| {
         swapchainImageBase[i] = @ptrCast(image);
     }
@@ -304,7 +303,6 @@ pub fn RenderView(
 ) !void {
     const swapchainImage: *c.XrSwapchainImageOpenGLESKHR = @ptrCast(_swapchainImage);
     _ = swapchainFormat;
-    _ = cubes;
     std.debug.assert(layerView.subImage.imageArrayIndex == 0); // Texture arrays not supported.
 
     c.glBindFramebuffer(c.GL_FRAMEBUFFER, m_swapchainFramebuffer);
@@ -335,31 +333,25 @@ pub fn RenderView(
     // Set shaders and uniform variables.
     c.glUseProgram(m_program);
 
-    //         const auto& pose = layerView.pose;
-    //         XrMatrix4x4f proj;
-    //         XrMatrix4x4f_CreateProjectionFov(&proj, GRAPHICS_OPENGL_ES, layerView.fov, 0.05f, 100.0f);
-    //         XrMatrix4x4f toView;
-    //         XrMatrix4x4f_CreateFromRigidTransform(&toView, &pose);
-    //         XrMatrix4x4f view;
-    //         XrMatrix4x4f_InvertRigidBody(&view, &toView);
-    //         XrMatrix4x4f vp;
-    //         XrMatrix4x4f_Multiply(&vp, &proj, &view);
-    //
-    //         // Set cube primitive data.
-    //         glBindVertexArray(m_vao);
-    //
-    //         // Render each cube
-    //         for (const Cube& cube : cubes) {
-    //             // Compute the model-view-projection transform and set it..
-    //             XrMatrix4x4f model;
-    //             XrMatrix4x4f_CreateTranslationRotationScale(&model, &cube.Pose.position, &cube.Pose.orientation, &cube.Scale);
-    //             XrMatrix4x4f mvp;
-    //             XrMatrix4x4f_Multiply(&mvp, &vp, &model);
-    //             glUniformMatrix4fv(m_modelViewProjectionUniformLocation, 1, GL_FALSE, reinterpret_cast<const GLfloat*>(&mvp));
-    //
-    //             // Draw the cube.
-    //             glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(ArraySize(Geometry::c_cubeIndices)), GL_UNSIGNED_SHORT, nullptr);
-    //         }
+    const pose = layerView.pose;
+    const proj = xr_linear.XrMatrix4x4f_CreateProjectionFov(.GRAPHICS_OPENGL_ES, layerView.fov, 0.05, 100.0);
+    const toView = xr_linear.XrMatrix4x4f_CreateFromRigidTransform(pose);
+    const view = xr_linear.XrMatrix4x4f_InvertRigidBody(toView);
+    const vp = xr_linear.XrMatrix4x4f_Multiply(proj, view);
+
+    // Set cube primitive data.
+    c.glBindVertexArray(m_vao);
+
+    // Render each cube
+    for (cubes) |cube| {
+        // Compute the model-view-projection transform and set it..
+        const model = xr_linear.XrMatrix4x4f_CreateTranslationRotationScale(cube.Pose.position, cube.Pose.orientation, cube.Scale);
+        const mvp = xr_linear.XrMatrix4x4f_Multiply(vp, model);
+        c.glUniformMatrix4fv(m_modelViewProjectionUniformLocation, 1, c.GL_FALSE, &mvp.m);
+
+        // Draw the cube.
+        c.glDrawElements(c.GL_TRIANGLES, geometry.c_cubeIndices.len, c.GL_UNSIGNED_SHORT, null);
+    }
 
     c.glBindVertexArray(0);
     c.glUseProgram(0);
@@ -370,4 +362,3 @@ pub fn GetSupportedSwapchainSampleCount(_: *const c.XrViewConfigurationView) u32
     return 1;
 }
 
-//     void UpdateOptions(const std::shared_ptr<Options>& options) override { m_clearColor = options->GetBackgroundClearColor(); }
