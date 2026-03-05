@@ -1,6 +1,9 @@
 #include <openxr/openxr.h>
 #define XR_USE_PLATFORM_ANDROID
 #define XR_USE_GRAPHICS_API_OPENGL_ES
+#include <android_native_app_glue.h>
+#include <android/native_activity.h>
+#include <android/log.h>
 #include <android/sensor.h>
 #include <EGL/egl.h>
 #include <GLES/gl.h>

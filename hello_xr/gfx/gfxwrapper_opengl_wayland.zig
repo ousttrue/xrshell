@@ -12,6 +12,11 @@ const OPENGL_VERSION_MINOR = 5;
 
 // #define XR_USE_PLATFORM_WAYLAND 1
 
+pub const extensions = [_][*:0]const u8{
+    c.XR_KHR_OPENGL_ES_ENABLE_EXTENSION_NAME,
+    c.XR_MNDX_EGL_ENABLE_EXTENSION_NAME,
+};
+
 const wl = @cImport({
     @cInclude("wayland-client.h");
     @cInclude("wayland-client-protocol.h");

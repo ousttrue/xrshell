@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const xr_util = @import("../xr_util.zig");
 const CHECK_XRCMD = xr_util.CHECK_XRCMD;
 const geometry = @import("../geometry.zig");
@@ -6,7 +7,10 @@ const Cube = @import("../Cube.zig");
 const Options = @import("../Options.zig");
 const xr_linear = @import("xr_linear.zig");
 
-const gfxwrapper_opengl = @import("gfxwrapper_opengl_wayland.zig");
+const gfxwrapper_opengl = if (builtin.abi.isAndroid())
+    @import("gfxwrapper_opengl_android.zig")
+else
+    @import("gfxwrapper_opengl_wayland.zig");
 const c = @import("c");
 
 var m_swapchainImageBuffers: std.ArrayList([]c.XrSwapchainImageOpenGLESKHR) = .{};
@@ -24,12 +28,8 @@ var m_contextApiMajorVersion: c.GLint = 0;
 var m_colorToDepthMap: std.AutoHashMap(u32, u32) = undefined;
 var m_clearColor: [4]f32 = undefined;
 
-const extensions = [_][*:0]const u8{
-    c.XR_KHR_OPENGL_ES_ENABLE_EXTENSION_NAME,
-    c.XR_MNDX_EGL_ENABLE_EXTENSION_NAME,
-};
 pub fn GetInstanceExtensions() []const [*:0]const u8 {
-    return &extensions;
+    return &gfxwrapper_opengl.extensions;
 }
 
 // The version statement has come on first line.
