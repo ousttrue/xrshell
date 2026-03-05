@@ -47,6 +47,11 @@ pub fn build(b: *std.Build) !void {
             .linkage = .dynamic,
             .use_llvm = true,
         });
+        lib.addCSourceFiles(.{
+            .files = &.{
+                "android_helper.cpp",
+            },
+        });
 
         // const ndk_path = try zbk.android.ndk.getPath(b, .{ .android_home = android_home });
         const sdk_info = try zbk.android.SdkInfo.init(b.allocator, if (target.result.os.tag == .windows) .androidstudio else .opt);
@@ -64,6 +69,7 @@ pub fn build(b: *std.Build) !void {
             "{s}/sources/android/native_app_glue/android_native_app_glue.c",
             .{sdk_info.ndk_path},
         ) } });
+        lib.addIncludePath(.{ .cwd_relative = b.fmt("{s}/sources/android/native_app_glue", .{sdk_info.ndk_path}) });
 
         const c_mod = build_c_mod_android(b, target, optimize, openxr_dep.path("include"), &.{
             .{ .cwd_relative = libc_file.include_dir },

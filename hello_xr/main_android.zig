@@ -1,48 +1,43 @@
 const std = @import("std");
 const c = @import("c");
+const Options = @import("Options.zig");
+const OpenXrProgram = @import("OpenXrProgram.zig");
+const action = @import("action.zig");
 
-// void ShowHelp() {
-//     Log::Write(Log::Level::Info, "adb shell setprop debug.xr.graphicsPlugin OpenGLES|Vulkan");
-//     Log::Write(Log::Level::Info, "adb shell setprop debug.xr.formFactor Hmd|Handheld");
-//     Log::Write(Log::Level::Info, "adb shell setprop debug.xr.viewConfiguration Stereo|Mono");
-//     Log::Write(Log::Level::Info, "adb shell setprop debug.xr.blendMode Opaque|Additive|AlphaBlend");
-// }
-//
-// bool UpdateOptionsFromSystemProperties(Options& options) {
-// #if defined(DEFAULT_GRAPHICS_PLUGIN_OPENGLES)
-//     options.GraphicsPlugin = "OpenGLES";
-// #elif defined(DEFAULT_GRAPHICS_PLUGIN_VULKAN)
-//     options.GraphicsPlugin = "Vulkan";
-// #endif
-//
-//     char value[PROP_VALUE_MAX] = {};
-//     if (__system_property_get("debug.xr.graphicsPlugin", value) != 0) {
-//         options.GraphicsPlugin = value;
-//     }
-//
-//     if (__system_property_get("debug.xr.formFactor", value) != 0) {
-//         options.FormFactor = value;
-//     }
-//
-//     if (__system_property_get("debug.xr.viewConfiguration", value) != 0) {
-//         options.ViewConfiguration = value;
-//     }
-//
-//     if (__system_property_get("debug.xr.blendMode", value) != 0) {
-//         options.EnvironmentBlendMode = value;
-//     }
-//
-//     try {
-//         options.ParseStrings();
-//     } catch (std::invalid_argument& ia) {
-//         Log::Write(Log::Level::Error, ia.what());
-//         ShowHelp();
-//         return false;
-//     }
-//     return true;
-// }
-//
-// #ifdef XR_USE_PLATFORM_ANDROID
+fn ShowHelp() void {
+    std.log.info("adb shell setprop debug.xr.graphicsPlugin OpenGLES|Vulkan", .{});
+    std.log.info("adb shell setprop debug.xr.formFactor Hmd|Handheld", .{});
+    std.log.info("adb shell setprop debug.xr.viewConfiguration Stereo|Mono", .{});
+    std.log.info("adb shell setprop debug.xr.blendMode Opaque|Additive|AlphaBlend", .{});
+}
+
+fn UpdateOptionsFromSystemProperties(options: *Options) bool {
+    options.GraphicsPlugin = .init("OpenGLES");
+
+    var value: [c.PROP_VALUE_MAX]u8 = undefined;
+    if (c.__system_property_get("debug.xr.graphicsPlugin", &value) != 0) {
+        options.GraphicsPlugin = .init(std.mem.sliceTo(&value, 0));
+    }
+
+    if (c.__system_property_get("debug.xr.formFactor", &value) != 0) {
+        options.FormFactor = .init(std.mem.sliceTo(&value, 0));
+    }
+
+    if (c.__system_property_get("debug.xr.viewConfiguration", &value) != 0) {
+        options.ViewConfiguration = .init(std.mem.sliceTo(&value, 0));
+    }
+
+    if (c.__system_property_get("debug.xr.blendMode", &value) != 0) {
+        options.EnvironmentBlendMode = .init(std.mem.sliceTo(&value, 0));
+    }
+
+    options.ParseStrings() catch |e| {
+        std.log.err("{s}", .{@errorName(e)});
+        ShowHelp();
+        return false;
+    };
+    return true;
+}
 
 const AndroidAppState = struct {
     NativeWindow: ?*c.ANativeWindow = null,
@@ -58,37 +53,37 @@ export fn app_handle_cmd(app: [*c]c.android_app, cmd: c_int) void {
         // application thread from onCreate(). The application thread
         // then calls android_main().
         c.APP_CMD_START => {
-            //             Log::Write(Log::Level::Info, "    APP_CMD_START");
-            //             Log::Write(Log::Level::Info, "onStart()");
+            std.log.info("    APP_CMD_START", .{});
+            std.log.info("onStart()", .{});
         },
         c.APP_CMD_RESUME => {
-            //             Log::Write(Log::Level::Info, "onResume()");
-            //             Log::Write(Log::Level::Info, "    APP_CMD_RESUME");
-            //             appState.Resumed = true;
+            std.log.info("onResume()", .{});
+            std.log.info("    APP_CMD_RESUME", .{});
+            appState.Resumed = true;
         },
         c.APP_CMD_PAUSE => {
-            //             Log::Write(Log::Level::Info, "onPause()");
-            //             Log::Write(Log::Level::Info, "    APP_CMD_PAUSE");
-            //             appState.Resumed = false;
+            std.log.info("onPause()", .{});
+            std.log.info("    APP_CMD_PAUSE", .{});
+            appState.Resumed = false;
         },
         c.APP_CMD_STOP => {
-            //             Log::Write(Log::Level::Info, "onStop()");
-            //             Log::Write(Log::Level::Info, "    APP_CMD_STOP");
+            std.log.info("onStop()", .{});
+            std.log.info("    APP_CMD_STOP", .{});
         },
         c.APP_CMD_DESTROY => {
-            //             Log::Write(Log::Level::Info, "onDestroy()");
-            //             Log::Write(Log::Level::Info, "    APP_CMD_DESTROY");
-            //             appState.NativeWindow = NULL;
+            std.log.info("onDestroy()", .{});
+            std.log.info("    APP_CMD_DESTROY", .{});
+            appState.NativeWindow = null;
         },
         c.APP_CMD_INIT_WINDOW => {
-            //             Log::Write(Log::Level::Info, "surfaceCreated()");
-            //             Log::Write(Log::Level::Info, "    APP_CMD_INIT_WINDOW");
+            std.log.info("surfaceCreated()", .{});
+            std.log.info("    APP_CMD_INIT_WINDOW", .{});
             appState.NativeWindow = app.*.window;
         },
         c.APP_CMD_TERM_WINDOW => {
-            //             Log::Write(Log::Level::Info, "surfaceDestroyed()");
-            //             Log::Write(Log::Level::Info, "    APP_CMD_TERM_WINDOW");
-            //             appState.NativeWindow = NULL;
+            std.log.info("surfaceDestroyed()", .{});
+            std.log.info("    APP_CMD_TERM_WINDOW", .{});
+            appState.NativeWindow = null;
         },
         else => {},
     }
@@ -98,6 +93,10 @@ export fn app_handle_cmd(app: [*c]c.android_app, cmd: c_int) void {
 // android_native_app_glue.  It runs in its own thread, with its own
 // event loop for receiving input events and doing other things.
 export fn android_main(app: *c.android_app) void {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    const allocator = gpa.allocator();
+    defer std.debug.assert(gpa.deinit() == .ok);
+
     //     try {
     //         JNIEnv* Env;
     //         app.activity.vm.AttachCurrentThread(&Env, null);
@@ -106,87 +105,83 @@ export fn android_main(app: *c.android_app) void {
     app.userData = &appState;
     app.onAppCmd = app_handle_cmd;
 
-    //         std::shared_ptr<Options> options = std::make_shared<Options>();
-    //         if (!UpdateOptionsFromSystemProperties(*options)) {
-    //             return;
-    //         }
-    //
+    var options: Options = .{};
+    if (!UpdateOptionsFromSystemProperties(&options)) {
+        return;
+    }
+
     //         std::shared_ptr<PlatformData> data = std::make_shared<PlatformData>();
     //         data.applicationVM = app.activity.vm;
     //         data.applicationActivity = app.activity.clazz;
-    //
-    //         bool requestRestart = false;
-    //         bool exitRenderLoop = false;
-    //
-    //         // Create platform-specific implementation.
+
+    var requestRestart = false;
+    var exitRenderLoop = false;
+
+    // Create platform-specific implementation.
     //         std::shared_ptr<IPlatformPlugin> platformPlugin = CreatePlatformPlugin(options, data);
     //         // Create graphics API implementation.
     //         std::shared_ptr<IGraphicsPlugin> graphicsPlugin = CreateGraphicsPlugin(options, platformPlugin);
-    //
-    //         // Initialize the OpenXR program.
-    //         std::shared_ptr<IOpenXrProgram> program = CreateOpenXrProgram(options, platformPlugin, graphicsPlugin);
-    //
-    //         // Initialize the loader for this platform
-    //         PFN_xrInitializeLoaderKHR initializeLoader = null;
-    //         if (XR_SUCCEEDED(
-    //                 xrGetInstanceProcAddr(XR_NULL_HANDLE, "xrInitializeLoaderKHR", (PFN_xrVoidFunction*)(&initializeLoader)))) {
-    //             XrLoaderInitInfoAndroidKHR loaderInitInfoAndroid = {XR_TYPE_LOADER_INIT_INFO_ANDROID_KHR};
-    //             loaderInitInfoAndroid.applicationVM = app.activity.vm;
-    //             loaderInitInfoAndroid.applicationContext = app.activity.clazz;
-    //             initializeLoader((const XrLoaderInitInfoBaseHeaderKHR*)&loaderInitInfoAndroid);
-    //         }
-    //
-    //         program.CreateInstance();
-    //         program.InitializeSystem();
-    //
-    //         options.SetEnvironmentBlendMode(program.GetPreferredBlendMode());
-    //         UpdateOptionsFromSystemProperties(*options);
-    //         platformPlugin.UpdateOptions(options);
-    //         graphicsPlugin.UpdateOptions(options);
-    //
-    //         program.InitializeDevice();
-    //         program.InitializeSession();
-    //         program.CreateSwapchains();
-    //
-    //         while (app.destroyRequested == 0) {
-    //             // Read all pending events.
-    //             for (;;) {
-    //                 int events;
-    //                 struct android_poll_source* source;
-    //                 // If the timeout is zero, returns immediately without blocking.
-    //                 // If the timeout is negative, waits indefinitely until an event appears.
-    //                 const int timeoutMilliseconds =
-    //                     (!appState.Resumed && !program.IsSessionRunning() && app.destroyRequested == 0) ? -1 : 0;
-    //                 if (ALooper_pollAll(timeoutMilliseconds, null, &events, (void**)&source) < 0) {
-    //                     break;
-    //                 }
-    //
-    //                 // Process this event.
-    //                 if (source != null) {
-    //                     source.process(app, source);
-    //                 }
-    //             }
-    //
-    //             program.PollEvents(&exitRenderLoop, &requestRestart);
-    //             if (exitRenderLoop) {
-    //                 ANativeActivity_finish(app.activity);
-    //                 continue;
-    //             }
-    //
-    //             if (!program.IsSessionRunning()) {
-    //                 // Throttle loop since xrWaitFrame won't be called.
-    //                 std::this_thread::sleep_for(std::chrono::milliseconds(250));
-    //                 continue;
-    //             }
-    //
-    //             program.PollActions();
-    //             program.RenderFrame();
-    //         }
-    //
-    //         app.activity.vm.DetachCurrentThread();
-    //     } catch (const std::exception& ex) {
-    //         Log::Write(Log::Level::Error, ex.what());
-    //     } catch (...) {
-    //         Log::Write(Log::Level::Error, "Unknown Error");
-    //     }
+
+    // Initialize the OpenXR program.
+    OpenXrProgram.init(allocator, &options);
+    defer OpenXrProgram.deinit(allocator);
+
+    // Initialize the loader for this platform
+    var initializeLoader: c.PFN_xrInitializeLoaderKHR = null;
+    if (c.XR_SUCCEEDED(c.xrGetInstanceProcAddr(null, "xrInitializeLoaderKHR", &initializeLoader))) {
+        var loaderInitInfoAndroid: c.XrLoaderInitInfoAndroidKHR = .{
+            .type = c.XR_TYPE_LOADER_INIT_INFO_ANDROID_KHR,
+            .applicationVM = @ptrCast(app.activity.*.vm),
+            .applicationContext = app.activity.*.clazz,
+        };
+        _ = initializeLoader.?(@ptrCast(&loaderInitInfoAndroid));
+    }
+
+    OpenXrProgram.CreateInstance(allocator) catch @panic("OpenXrProgram.CreateInstance");
+    OpenXrProgram.InitializeSystem();
+
+    options.SetEnvironmentBlendMode(OpenXrProgram.GetPreferredBlendMode(allocator) catch @panic("OpenXrProgram.GetPreferredBlendMode"));
+    _ = UpdateOptionsFromSystemProperties(&options);
+    // platformPlugin.UpdateOptions(options);
+    // graphicsPlugin.UpdateOptions(options);
+
+    OpenXrProgram.InitializeDevice(allocator) catch @panic("OpenXrProgram.InitializeDevice");
+    const session = OpenXrProgram.InitializeSession(allocator) catch @panic("OpenXrProgram.InitializeSession");
+    OpenXrProgram.CreateSwapchains(allocator) catch @panic("OpenXrProgram.CreateSwapchains");
+
+    while (app.destroyRequested == 0) {
+        // Read all pending events.
+        while (true) {
+            var events: c_int = undefined;
+            var source: ?*c.android_poll_source = null;
+            // If the timeout is zero, returns immediately without blocking.
+            // If the timeout is negative, waits indefinitely until an event appears.
+            const timeoutMilliseconds: c_int = if (!appState.Resumed and !OpenXrProgram.IsSessionRunning() and app.destroyRequested == 0) -1 else 0;
+            if (c.ALooper_pollAll(timeoutMilliseconds, null, &events, @ptrCast(&source)) < 0) {
+                break;
+            }
+
+            // Process this event.
+            if (source) |p| {
+                c.call_source_process(app, p);
+            }
+        }
+
+        OpenXrProgram.PollEvents(allocator, &exitRenderLoop, &requestRestart) catch @panic("OpenXrProgram.PollEvents");
+        if (exitRenderLoop) {
+            c.ANativeActivity_finish(app.activity);
+            continue;
+        }
+
+        if (!OpenXrProgram.IsSessionRunning()) {
+            // Throttle loop since xrWaitFrame won't be called.
+            std.Thread.sleep(std.time.ns_per_ms * 250);
+            continue;
+        }
+
+        action.PollActions(session);
+        OpenXrProgram.RenderFrame(allocator) catch @panic("OpenXrProgram.RenderFrame");
+    }
+
+    // app.activity.vm.DetachCurrentThread();
 }

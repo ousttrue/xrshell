@@ -21,7 +21,7 @@ pub fn GetBackgroundClearColor(this: @This()) [4]f32 {
     };
 }
 
-fn ParseStrings(this: *@This()) !void {
+pub fn ParseStrings(this: *@This()) !void {
     this.parsed.FormFactor = try GetXrFormFactor(this.FormFactor);
     this.parsed.ViewConfigType = try GetXrViewConfigurationType(this.ViewConfiguration);
     this.parsed.EnvironmentBlendMode = try GetXrEnvironmentBlendMode(this.EnvironmentBlendMode);
@@ -66,7 +66,7 @@ fn GetXrEnvironmentBlendMode(environmentBlendModeStr: FixedString) !c.XrEnvironm
 pub const FixedString = extern struct {
     c_str: [32]u8 = undefined,
 
-    fn init(src: []const u8) @This() {
+    pub fn init(src: []const u8) @This() {
         var this: @This() = undefined;
         std.mem.copyForwards(u8, &this.c_str, src);
         this.c_str[src.len] = 0;

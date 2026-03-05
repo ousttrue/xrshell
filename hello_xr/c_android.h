@@ -10,3 +10,5 @@
 #include <GLES3/gl3.h>
 #include <GLES3/gl31.h>
 #include <openxr/openxr_platform.h>
+#include <sys/system_properties.h>
+#include "android_helper.h"
