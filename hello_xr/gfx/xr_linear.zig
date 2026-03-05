@@ -13,7 +13,7 @@ const c = @import("c");
 // static const XrColor4f XrColorLightGrey = {0.7f, 0.7f, 0.7f, 1.0f};
 // static const XrColor4f XrColorDarkGrey = {0.3f, 0.3f, 0.3f, 1.0f};
 
-pub const GraphicsAPI = enum { GRAPHICS_VULKAN, GRAPHICS_OPENGL, GRAPHICS_OPENGL_ES, GRAPHICS_D3D, GRAPHICS_METAL };
+pub const GraphicsAPI = enum { VULKAN, OPENGL, OPENGL_ES, D3D, METAL };
 
 // Column-major, pre-multiplied. This type does not exist in the OpenXR API and is provided for convenience.
 pub const XrMatrix4x4f = struct {
@@ -459,11 +459,11 @@ pub fn XrMatrix4x4f_CreateProjection(
 
     // Set to tanAngleDown - tanAngleUp for a clip space with positive Y down (Vulkan).
     // Set to tanAngleUp - tanAngleDown for a clip space with positive Y up (OpenGL / D3D / Metal).
-    const tanAngleHeight = if (graphicsApi == .GRAPHICS_VULKAN) (tanAngleDown - tanAngleUp) else (tanAngleUp - tanAngleDown);
+    const tanAngleHeight = if (graphicsApi == .VULKAN) (tanAngleDown - tanAngleUp) else (tanAngleUp - tanAngleDown);
 
     // Set to nearZ for a [-1,1] Z clip space (OpenGL / OpenGL ES).
     // Set to zero for a [0,1] Z clip space (Vulkan / D3D / Metal).
-    const offsetZ = if (graphicsApi == .GRAPHICS_OPENGL or graphicsApi == .GRAPHICS_OPENGL_ES) nearZ else 0;
+    const offsetZ = if (graphicsApi == .OPENGL or graphicsApi == .OPENGL_ES) nearZ else 0;
 
     var result: XrMatrix4x4f = undefined;
     if (farZ <= nearZ) {
