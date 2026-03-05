@@ -32,18 +32,6 @@ pub fn GetInstanceExtensions() []const [*:0]const u8 {
     return &extensions;
 }
 
-// #include "pch.h"
-// #include "common.h"
-// #include "geometry.h"
-// #include "graphicsplugin.h"
-// #include "options.h"
-//
-// #ifdef XR_USE_GRAPHICS_API_OPENGL_ES
-//
-// #include "common/gfxwrapper_opengl.h"
-// #include <common/xr_linear.h>
-//
-
 // The version statement has come on first line.
 const VertexShaderGlsl: [*:0]const u8 =
     \\#version 320 es
@@ -334,7 +322,7 @@ pub fn RenderView(
     c.glUseProgram(m_program);
 
     const pose = layerView.pose;
-    const proj = xr_linear.XrMatrix4x4f_CreateProjectionFov(.GRAPHICS_OPENGL_ES, layerView.fov, 0.05, 100.0);
+    const proj = xr_linear.XrMatrix4x4f_CreateProjectionFov(.OPENGL_ES, layerView.fov, 0.05, 100.0);
     const toView = xr_linear.XrMatrix4x4f_CreateFromRigidTransform(pose);
     const view = xr_linear.XrMatrix4x4f_InvertRigidBody(toView);
     const vp = xr_linear.XrMatrix4x4f_Multiply(proj, view);
@@ -361,4 +349,3 @@ pub fn RenderView(
 pub fn GetSupportedSwapchainSampleCount(_: *const c.XrViewConfigurationView) u32 {
     return 1;
 }
-

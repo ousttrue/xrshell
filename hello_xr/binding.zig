@@ -8,7 +8,7 @@ pub const Cube = @import("Cube.zig");
 pub const gfx = if (builtin.target.os.tag == .windows)
     @import("gfx/graphicsplugin_opengl.zig")
 else
-    @import("gfx/graphicsplugin_opengl.zig");
+    @import("gfx/graphicsplugin_opengles.zig");
 
 pub const platform = if (builtin.target.os.tag == .windows)
     @import("platform/platformplugin_win32.zig")

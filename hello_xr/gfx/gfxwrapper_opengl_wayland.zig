@@ -1,5 +1,5 @@
 const std = @import("std");
-
+const c = @import("c");
 
 // ================================
 // Platform headers / declarations

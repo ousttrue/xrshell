@@ -86,11 +86,13 @@ pub fn build(b: *std.Build) !void {
     });
 
     // copy dll
-    const dll = b.addInstallBinFile(
-        openxr_loader.getInstallPrefix().path(b, "bin/openxr_loader.dll"),
-        "openxr_loader.dll",
-    );
-    b.getInstallStep().dependOn(&dll.step);
+    if (target.result.os.tag == .windows) {
+        const dll = b.addInstallBinFile(
+            openxr_loader.getInstallPrefix().path(b, "bin/openxr_loader.dll"),
+            "openxr_loader.dll",
+        );
+        b.getInstallStep().dependOn(&dll.step);
+    }
 
     const t = b.addTranslateC(.{
         .target = target,
@@ -98,7 +100,7 @@ pub fn build(b: *std.Build) !void {
         .root_source_file = b.path(if (target.result.os.tag == .windows)
             "c_windows.h"
         else
-            "c_linux.h"),
+            "c_wayland.h"),
     });
     t.addIncludePath(openxr_dep.path("include"));
     t.addIncludePath(b.path("glad2/include"));
