@@ -81,6 +81,40 @@ pub fn build(b: *std.Build) !void {
         lib.addLibraryPath(openxr_loader.getInstallPrefix().path(b, "lib"));
         lib.linkSystemLibrary("openxr_loader");
 
+        // android sdk
+        const apk_builder = try zbk.android.ApkBuilder.init(b, .{
+            .sdk_info = sdk_info,
+            .api_level = API_LEVEL,
+        });
+
+        const keystore_password = "example_password";
+        const keystore = apk_builder.jdk.makeKeystore(b, keystore_password);
+
+        // make apk from
+        const apk = apk_builder.makeApk(b, .{
+            .android_manifest = try zbk.android.generateAndroidManifest(b, .{
+                .pkg_name = PKG_NAME,
+                .api_level = API_LEVEL,
+                .android_label = lib.name,
+            }),
+            .resource_dir = b.path("res"),
+            .keystore_password = keystore_password,
+            .keystore_file = keystore.output,
+            .copy_list = &.{
+                .{ .src = lib.getEmittedBin() },
+            },
+        });
+        const install = b.addInstallFile(apk, "bin/hello_xr.apk");
+        b.getInstallStep().dependOn(&install.step);
+
+        // adb install
+        // adb run
+        const run_step = b.step("run", "Install and run the application on an Android device");
+        const adb_install = apk_builder.platform_tools.adb_install(b, install.source);
+        const adb_start = apk_builder.platform_tools.adb_start(b, .{ .package_name = PKG_NAME });
+        adb_start.step.dependOn(&adb_install.step);
+        run_step.dependOn(&adb_start.step);
+
         break :blk lib;
     } else blk: {
         const exe = b.addExecutable(.{
