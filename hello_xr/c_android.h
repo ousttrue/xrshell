@@ -1,0 +1,9 @@
+#include <openxr/openxr.h>
+#define XR_USE_PLATFORM_ANDROID
+#define XR_USE_GRAPHICS_API_OPENGL_ES
+#include <android/sensor.h>
+#include <EGL/egl.h>
+#include <GLES/gl.h>
+#include <GLES3/gl3.h>
+#include <GLES3/gl31.h>
+#include <openxr/openxr_platform.h>
