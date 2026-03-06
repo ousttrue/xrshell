@@ -154,7 +154,7 @@ fn LogLayersAndExtensions(allocator: std.mem.Allocator) !void {
     }
 }
 
-fn CreateInstanceInternal(allocator: std.mem.Allocator) !void {
+fn CreateInstanceInternal(allocator: std.mem.Allocator, instance_create_info: ?*const anyopaque) !void {
     std.debug.assert(m_instance == null);
 
     const platform_extensions = binding.platform.GetInstanceExtensions();
@@ -176,7 +176,7 @@ fn CreateInstanceInternal(allocator: std.mem.Allocator) !void {
 
     var createInfo: c.XrInstanceCreateInfo = .{
         .type = c.XR_TYPE_INSTANCE_CREATE_INFO,
-        .next = binding.platform.GetInstanceCreateExtension(),
+        .next = instance_create_info,
         .enabledExtensionCount = @intCast(extensions.items.len),
         .enabledExtensionNames = extensions.items.ptr,
         .applicationInfo = .{},
@@ -202,9 +202,9 @@ fn LogInstanceInfo() !void {
     });
 }
 
-pub fn CreateInstance(allocator: std.mem.Allocator) !void {
+pub fn CreateInstance(allocator: std.mem.Allocator, instance_create_info: ?*const anyopaque) !void {
     try LogLayersAndExtensions(allocator);
-    try CreateInstanceInternal(allocator);
+    try CreateInstanceInternal(allocator, instance_create_info);
     try LogInstanceInfo();
 }
 

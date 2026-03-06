@@ -38,7 +38,7 @@ pub fn main() !void {
         OpenXrProgram.init(allocator, &options);
         defer OpenXrProgram.deinit(allocator);
 
-        try OpenXrProgram.CreateInstance(allocator);
+        try OpenXrProgram.CreateInstance(allocator, null);
         OpenXrProgram.InitializeSystem();
 
         options.SetEnvironmentBlendMode(try OpenXrProgram.GetPreferredBlendMode(allocator));

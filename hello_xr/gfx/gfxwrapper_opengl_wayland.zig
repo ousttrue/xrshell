@@ -292,7 +292,7 @@ fn ksGpuDevice_Destroy(device: *ksGpuDevice) void {
 // GPU Context.
 // ================================================================================================================================
 fn ksGpuContext_BitsForSurfaceFormat(colorFormat: ksGpuSurfaceColorFormat, depthFormat: ksGpuSurfaceDepthFormat) ksGpuSurfaceBits {
-    const bits: ksGpuSurfaceBits = .{
+    var bits: ksGpuSurfaceBits = .{
         .redBits = (if (colorFormat == .R8G8B8A8)
             8
         else
@@ -303,30 +303,39 @@ fn ksGpuContext_BitsForSurfaceFormat(colorFormat: ksGpuSurfaceColorFormat, depth
                     5
                 else
                     (if (colorFormat == .B5G6R5) 5 else 8)))),
-        //     bits.greenBits = ((colorFormat == KS_GPU_SURFACE_COLOR_FORMAT_R8G8B8A8)
-        //                           ? 8
-        //                           : ((colorFormat == KS_GPU_SURFACE_COLOR_FORMAT_B8G8R8A8)
-        //                                  ? 8
-        //                                  : ((colorFormat == KS_GPU_SURFACE_COLOR_FORMAT_R5G6B5)
-        //                                         ? 6
-        //                                         : ((colorFormat == KS_GPU_SURFACE_COLOR_FORMAT_B5G6R5) ? 6 : 8))));
-        //     bits.blueBits = ((colorFormat == KS_GPU_SURFACE_COLOR_FORMAT_R8G8B8A8)
-        //                          ? 8
-        //                          : ((colorFormat == KS_GPU_SURFACE_COLOR_FORMAT_B8G8R8A8)
-        //                                 ? 8
-        //                                 : ((colorFormat == KS_GPU_SURFACE_COLOR_FORMAT_R5G6B5)
-        //                                        ? 5
-        //                                        : ((colorFormat == KS_GPU_SURFACE_COLOR_FORMAT_B5G6R5) ? 5 : 8))));
-        //     bits.alphaBits = ((colorFormat == KS_GPU_SURFACE_COLOR_FORMAT_R8G8B8A8)
-        //                           ? 8
-        //                           : ((colorFormat == KS_GPU_SURFACE_COLOR_FORMAT_B8G8R8A8)
-        //                                  ? 8
-        //                                  : ((colorFormat == KS_GPU_SURFACE_COLOR_FORMAT_R5G6B5)
-        //                                         ? 0
-        //                                         : ((colorFormat == KS_GPU_SURFACE_COLOR_FORMAT_B5G6R5) ? 0 : 8))));
-        //     bits.colorBits = bits.redBits + bits.greenBits + bits.blueBits + bits.alphaBits;
+        .greenBits = (if (colorFormat == .R8G8B8A8)
+            8
+        else
+            (if (colorFormat == .B8G8R8A8)
+                8
+            else
+                (if (colorFormat == .R5G6B5)
+                    6
+                else
+                    (if (colorFormat == .B5G6R5) 6 else 8)))),
+        .blueBits = (if (colorFormat == .R8G8B8A8)
+            8
+        else
+            (if (colorFormat == .B8G8R8A8)
+                8
+            else
+                (if (colorFormat == .R5G6B5)
+                    5
+                else
+                    (if (colorFormat == .B5G6R5) 5 else 8)))),
+        .alphaBits = (if (colorFormat == .R8G8B8A8)
+            8
+        else
+            (if (colorFormat == .B8G8R8A8)
+                8
+            else
+                (if (colorFormat == .R5G6B5)
+                    0
+                else
+                    (if (colorFormat == .B5G6R5) 0 else 8)))),
         .depthBits = (if (depthFormat == .D16) 16 else (if (depthFormat == .D24) 24 else 0)),
     };
+    bits.colorBits = bits.redBits + bits.greenBits + bits.blueBits + bits.alphaBits;
     return bits;
 }
 

@@ -4,6 +4,40 @@ const Options = @import("Options.zig");
 const OpenXrProgram = @import("OpenXrProgram.zig");
 const action = @import("action.zig");
 
+pub const std_options: std.Options = .{
+    .logFn = logFn,
+    .log_level = .debug,
+};
+
+pub fn logFn(
+    comptime message_level: std.log.Level,
+    comptime scope: @Type(.enum_literal),
+    comptime format: []const u8,
+    args: anytype,
+) void {
+    const priority = switch (message_level) {
+        .err => c.ANDROID_LOG_ERROR,
+        .warn => c.ANDROID_LOG_WARN,
+        .info => c.ANDROID_LOG_INFO,
+        .debug => c.ANDROID_LOG_DEBUG,
+    };
+    const prefix = if (scope == .default) "" else "(" ++ @tagName(scope) ++ "): ";
+
+    var buf = std.io.FixedBufferStream([4 * 1024]u8){
+        .buffer = undefined,
+        .pos = 0,
+    };
+    var writer = buf.writer();
+    writer.print(prefix ++ format, args) catch {};
+
+    if (buf.pos >= buf.buffer.len) {
+        buf.pos = buf.buffer.len - 1;
+    }
+    buf.buffer[buf.pos] = 0;
+
+    _ = c.__android_log_write(priority, "hello_xr", &buf.buffer);
+}
+
 fn ShowHelp() void {
     std.log.info("adb shell setprop debug.xr.graphicsPlugin OpenGLES|Vulkan", .{});
     std.log.info("adb shell setprop debug.xr.formFactor Hmd|Handheld", .{});
@@ -93,6 +127,8 @@ export fn app_handle_cmd(app: [*c]c.android_app, cmd: c_int) void {
 // android_native_app_glue.  It runs in its own thread, with its own
 // event loop for receiving input events and doing other things.
 export fn android_main(app: *c.android_app) void {
+    std.log.info("#### android_main ####", .{});
+
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
     defer std.debug.assert(gpa.deinit() == .ok);
@@ -137,7 +173,13 @@ export fn android_main(app: *c.android_app) void {
         _ = initializeLoader.?(@ptrCast(&loaderInitInfoAndroid));
     }
 
-    OpenXrProgram.CreateInstance(allocator) catch @panic("OpenXrProgram.CreateInstance");
+    const instanceCreateInfoAndroid: c.XrInstanceCreateInfoAndroidKHR = .{
+        .type = c.XR_TYPE_INSTANCE_CREATE_INFO_ANDROID_KHR,
+        .applicationVM = @ptrCast(app.activity.*.vm),
+        .applicationActivity = app.activity,
+    };
+
+    OpenXrProgram.CreateInstance(allocator, &instanceCreateInfoAndroid) catch @panic("OpenXrProgram.CreateInstance");
     OpenXrProgram.InitializeSystem();
 
     options.SetEnvironmentBlendMode(OpenXrProgram.GetPreferredBlendMode(allocator) catch @panic("OpenXrProgram.GetPreferredBlendMode"));
