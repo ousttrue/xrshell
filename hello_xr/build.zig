@@ -49,7 +49,7 @@ pub fn build(b: *std.Build) !void {
         });
         lib.addCSourceFiles(.{
             .files = &.{
-                "android_helper.cpp",
+                "android/android_helper.cpp",
             },
         });
 
@@ -218,7 +218,7 @@ fn build_c_mod_android(
     const t = b.addTranslateC(.{
         .target = target,
         .optimize = optimize,
-        .root_source_file = b.path("c_android.h"),
+        .root_source_file = b.path("android/c_android.h"),
     });
     for (includes) |include| {
         t.addIncludePath(include);
