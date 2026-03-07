@@ -92,19 +92,6 @@ pub fn build(b: *std.Build) !void {
         lib.addLibraryPath(openxr_loader.getInstallPrefix().path(b, "lib"));
         lib.linkSystemLibrary("openxr_loader");
 
-        // lib.addCSourceFiles(.{
-        //     .root = b.path("glad2/src"),
-        //     .files = &.{
-        //         "gl.c",
-        //         "egl.c",
-        //         // "glx.c",
-        //     },
-        //     .flags = &.{
-        //         "-DGLAD_GLES2",
-        //     },
-        // });
-        // lib.addIncludePath(b.path("glad2/include"));
-
         // android sdk
         const apk_builder = try zbk.android.ApkBuilder.init(b, .{
             .sdk_info = sdk_info,
@@ -166,7 +153,8 @@ pub fn build(b: *std.Build) !void {
 
         const openxr_loader = zbk.cpp.CMakeStep.create(b, .{
             .source = openxr_dep.path("").getPath(b),
-            .use_vcenv = target.result.os.tag == .windows,
+            .target = target,
+            .use_vcenv = b.graph.host.result.os.tag == .windows,
             .args = if (target.result.os.tag == .windows) &.{"-DDYNAMIC_LOADER=ON"} else &.{},
         });
         if (target.result.os.tag == .windows) {
@@ -180,15 +168,32 @@ pub fn build(b: *std.Build) !void {
         exe.addLibraryPath(openxr_loader.getInstallPrefix().path(b, "lib"));
         exe.linkSystemLibrary("openxr_loader");
 
+        const srcs = [_][]const u8{
+            "gl.c",
+        };
+        const srcs_windows = [_][]const u8{
+            "wgl.c",
+        };
+        const srcs_wayland = [_][]const u8{
+            "egl.c",
+            // "glx.c",
+        };
+        exe.addCSourceFiles(.{
+            .root = b.path("glad2/src"),
+            .files = &(if (target.result.os.tag == .windows)
+                srcs ++ srcs_windows
+            else
+                srcs ++ srcs_wayland),
+            .flags = &.{
+                "-DGLAD_GLES2",
+            },
+        });
+        exe.addIncludePath(b.path("glad2/include"));
+
         break :blk exe;
     };
     targets.append(b.allocator, bin) catch @panic("OOM");
     b.installArtifact(bin);
-
-    // if (!target.result.abi.isAndroid()) {
-    // add_glad(b, target, bin, b.path("glad2"));
-    // bin.linkLibrary(glad);
-    // }
 
     if (target.result.abi.isAndroid()) {
         for (LIBS_ANDROID) |lib| {
@@ -265,19 +270,6 @@ fn build_c_mod(
 //     //     }),
 //     //     // .use_llvm = true,
 //     // });
-//     const srcs = [_][]const u8{
-//         "gl.c",
-//     };
-//     const srcs_windows = [_][]const u8{
-//         "wgl.c",
-//     };
-//     lib.addCSourceFiles(.{
-//         .root = src.path(b, "src"),
-//         .files = &(if (target.result.os.tag == .windows)
-//             srcs ++ srcs_windows
-//         else
-//             srcs ++ srcs_linux),
-//     });
 //     lib.addIncludePath(src.path(b, "include"));
 //     lib.installHeadersDirectory(src.path(b, "include/glad"), "glad", .{});
 //
