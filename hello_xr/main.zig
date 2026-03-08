@@ -75,7 +75,7 @@ pub fn main() !void {
         defer OpenXrProgram.deinit(allocator);
 
         try OpenXrProgram.CreateInstance(allocator, null);
-        OpenXrProgram.InitializeSystem();
+        try OpenXrProgram.InitializeSystem();
 
         options.SetEnvironmentBlendMode(try OpenXrProgram.GetPreferredBlendMode(allocator));
 
@@ -91,7 +91,7 @@ pub fn main() !void {
             }
 
             if (OpenXrProgram.IsSessionRunning()) {
-                action.PollActions(session);
+                try action.PollActions(session);
                 try OpenXrProgram.RenderFrame(allocator);
             } else {
                 // Throttle loop since xrWaitFrame won't be called.

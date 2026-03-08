@@ -1,9 +1,9 @@
 const std = @import("std");
 const c = @import("c");
 const binding = @import("binding.zig");
-const xr_util = binding.xr_util;
-const CHECK_XRCMD = xr_util.CHECK_XRCMD;
-const CHECK_XRRESULT = xr_util.CHECK_XRRESULT;
+const xr_util = @import("xr_util");
+const XrError = xr_util.XrError;
+const XrResult = xr_util.XrResult;
 
 pub const Side = struct {
     pub const LEFT = 0;
@@ -37,21 +37,21 @@ pub fn deinit() void {
     }
 }
 
-pub fn InitializeActions(instance: c.XrInstance, session: c.XrSession) !void {
+pub fn InitializeActions(instance: c.XrInstance, session: c.XrSession) XrError!void {
     // Create an action set.
     {
         var actionSetInfo: c.XrActionSetCreateInfo = .{
             .type = c.XR_TYPE_ACTION_SET_CREATE_INFO,
             .priority = 0,
         };
-        _ = try std.fmt.bufPrintZ(&actionSetInfo.actionSetName, "gameplay", .{});
-        _ = try std.fmt.bufPrintZ(&actionSetInfo.localizedActionSetName, "Gameplay", .{});
-        CHECK_XRCMD(@src(), c.xrCreateActionSet(instance, &actionSetInfo, &m_input.actionSet));
+        _ = std.fmt.bufPrintZ(&actionSetInfo.actionSetName, "gameplay", .{}) catch @panic("OOM");
+        _ = std.fmt.bufPrintZ(&actionSetInfo.localizedActionSetName, "Gameplay", .{}) catch @panic("OOM");
+        _ = try XrResult.init(c.xrCreateActionSet(instance, &actionSetInfo, &m_input.actionSet));
     }
 
     // Get the XrPath for the left and right hands - we will use them as subaction paths.
-    CHECK_XRCMD(@src(), c.xrStringToPath(instance, "/user/hand/left", &m_input.handSubactionPath[Side.LEFT]));
-    CHECK_XRCMD(@src(), c.xrStringToPath(instance, "/user/hand/right", &m_input.handSubactionPath[Side.RIGHT]));
+    _ = try XrResult.init(c.xrStringToPath(instance, "/user/hand/left", &m_input.handSubactionPath[Side.LEFT]));
+    _ = try XrResult.init(c.xrStringToPath(instance, "/user/hand/right", &m_input.handSubactionPath[Side.RIGHT]));
 
     // Create actions.
     {
@@ -62,69 +62,69 @@ pub fn InitializeActions(instance: c.XrInstance, session: c.XrSession) !void {
             .countSubactionPaths = m_input.handSubactionPath.len,
             .subactionPaths = &m_input.handSubactionPath,
         };
-        _ = try std.fmt.bufPrintZ(&actionInfo.actionName, "grab_object", .{});
-        _ = try std.fmt.bufPrintZ(&actionInfo.localizedActionName, "Grab Object", .{});
-        CHECK_XRCMD(@src(), c.xrCreateAction(m_input.actionSet, &actionInfo, &m_input.grabAction));
+        _ = std.fmt.bufPrintZ(&actionInfo.actionName, "grab_object", .{}) catch @panic("OOM");
+        _ = std.fmt.bufPrintZ(&actionInfo.localizedActionName, "Grab Object", .{}) catch @panic("OOM");
+        _ = try XrResult.init(c.xrCreateAction(m_input.actionSet, &actionInfo, &m_input.grabAction));
 
         // Create an input action getting the left and right hand poses.
         actionInfo.actionType = c.XR_ACTION_TYPE_POSE_INPUT;
-        _ = try std.fmt.bufPrintZ(&actionInfo.actionName, "hand_pose", .{});
-        _ = try std.fmt.bufPrintZ(&actionInfo.localizedActionName, "Hand Pose", .{});
+        _ = std.fmt.bufPrintZ(&actionInfo.actionName, "hand_pose", .{}) catch @panic("OOM");
+        _ = std.fmt.bufPrintZ(&actionInfo.localizedActionName, "Hand Pose", .{}) catch @panic("OOM");
         actionInfo.countSubactionPaths = m_input.handSubactionPath.len;
         actionInfo.subactionPaths = &m_input.handSubactionPath;
-        CHECK_XRCMD(@src(), c.xrCreateAction(m_input.actionSet, &actionInfo, &m_input.poseAction));
+        _ = try XrResult.init(c.xrCreateAction(m_input.actionSet, &actionInfo, &m_input.poseAction));
 
         // Create output actions for vibrating the left and right controller.
         actionInfo.actionType = c.XR_ACTION_TYPE_VIBRATION_OUTPUT;
-        _ = try std.fmt.bufPrintZ(&actionInfo.actionName, "vibrate_hand", .{});
-        _ = try std.fmt.bufPrintZ(&actionInfo.localizedActionName, "Vibrate Hand", .{});
+        _ = std.fmt.bufPrintZ(&actionInfo.actionName, "vibrate_hand", .{}) catch @panic("OOM");
+        _ = std.fmt.bufPrintZ(&actionInfo.localizedActionName, "Vibrate Hand", .{}) catch @panic("OOM");
         actionInfo.countSubactionPaths = m_input.handSubactionPath.len;
         actionInfo.subactionPaths = &m_input.handSubactionPath;
-        CHECK_XRCMD(@src(), c.xrCreateAction(m_input.actionSet, &actionInfo, &m_input.vibrateAction));
+        _ = try XrResult.init(c.xrCreateAction(m_input.actionSet, &actionInfo, &m_input.vibrateAction));
 
         // Create input actions for quitting the session using the left and right controller.
         // Since it doesn't matter which hand did this, we do not specify subaction paths for it.
         // We will just suggest bindings for both hands, where possible.
         actionInfo.actionType = c.XR_ACTION_TYPE_BOOLEAN_INPUT;
-        _ = try std.fmt.bufPrintZ(&actionInfo.actionName, "quit_session", .{});
-        _ = try std.fmt.bufPrintZ(&actionInfo.localizedActionName, "Quit Session", .{});
+        _ = std.fmt.bufPrintZ(&actionInfo.actionName, "quit_session", .{}) catch @panic("OOM");
+        _ = std.fmt.bufPrintZ(&actionInfo.localizedActionName, "Quit Session", .{}) catch @panic("OOM");
         actionInfo.countSubactionPaths = 0;
         actionInfo.subactionPaths = null;
-        CHECK_XRCMD(@src(), c.xrCreateAction(m_input.actionSet, &actionInfo, &m_input.quitAction));
+        _ = try XrResult.init(c.xrCreateAction(m_input.actionSet, &actionInfo, &m_input.quitAction));
     }
 
     var selectPath: [Side.COUNT]c.XrPath = undefined;
-    CHECK_XRCMD(@src(), c.xrStringToPath(instance, "/user/hand/left/input/select/click", &selectPath[Side.LEFT]));
-    CHECK_XRCMD(@src(), c.xrStringToPath(instance, "/user/hand/right/input/select/click", &selectPath[Side.RIGHT]));
+    _ = try XrResult.init(c.xrStringToPath(instance, "/user/hand/left/input/select/click", &selectPath[Side.LEFT]));
+    _ = try XrResult.init(c.xrStringToPath(instance, "/user/hand/right/input/select/click", &selectPath[Side.RIGHT]));
     var squeezeValuePath: [Side.COUNT]c.XrPath = undefined;
-    CHECK_XRCMD(@src(), c.xrStringToPath(instance, "/user/hand/left/input/squeeze/value", &squeezeValuePath[Side.LEFT]));
-    CHECK_XRCMD(@src(), c.xrStringToPath(instance, "/user/hand/right/input/squeeze/value", &squeezeValuePath[Side.RIGHT]));
+    _ = try XrResult.init(c.xrStringToPath(instance, "/user/hand/left/input/squeeze/value", &squeezeValuePath[Side.LEFT]));
+    _ = try XrResult.init(c.xrStringToPath(instance, "/user/hand/right/input/squeeze/value", &squeezeValuePath[Side.RIGHT]));
     var squeezeForcePath: [Side.COUNT]c.XrPath = undefined;
-    CHECK_XRCMD(@src(), c.xrStringToPath(instance, "/user/hand/left/input/squeeze/force", &squeezeForcePath[Side.LEFT]));
-    CHECK_XRCMD(@src(), c.xrStringToPath(instance, "/user/hand/right/input/squeeze/force", &squeezeForcePath[Side.RIGHT]));
+    _ = try XrResult.init(c.xrStringToPath(instance, "/user/hand/left/input/squeeze/force", &squeezeForcePath[Side.LEFT]));
+    _ = try XrResult.init(c.xrStringToPath(instance, "/user/hand/right/input/squeeze/force", &squeezeForcePath[Side.RIGHT]));
     var squeezeClickPath: [Side.COUNT]c.XrPath = undefined;
-    CHECK_XRCMD(@src(), c.xrStringToPath(instance, "/user/hand/left/input/squeeze/click", &squeezeClickPath[Side.LEFT]));
-    CHECK_XRCMD(@src(), c.xrStringToPath(instance, "/user/hand/right/input/squeeze/click", &squeezeClickPath[Side.RIGHT]));
+    _ = try XrResult.init(c.xrStringToPath(instance, "/user/hand/left/input/squeeze/click", &squeezeClickPath[Side.LEFT]));
+    _ = try XrResult.init(c.xrStringToPath(instance, "/user/hand/right/input/squeeze/click", &squeezeClickPath[Side.RIGHT]));
     var posePath: [Side.COUNT]c.XrPath = undefined;
-    CHECK_XRCMD(@src(), c.xrStringToPath(instance, "/user/hand/left/input/grip/pose", &posePath[Side.LEFT]));
-    CHECK_XRCMD(@src(), c.xrStringToPath(instance, "/user/hand/right/input/grip/pose", &posePath[Side.RIGHT]));
+    _ = try XrResult.init(c.xrStringToPath(instance, "/user/hand/left/input/grip/pose", &posePath[Side.LEFT]));
+    _ = try XrResult.init(c.xrStringToPath(instance, "/user/hand/right/input/grip/pose", &posePath[Side.RIGHT]));
     var hapticPath: [Side.COUNT]c.XrPath = undefined;
-    CHECK_XRCMD(@src(), c.xrStringToPath(instance, "/user/hand/left/output/haptic", &hapticPath[Side.LEFT]));
-    CHECK_XRCMD(@src(), c.xrStringToPath(instance, "/user/hand/right/output/haptic", &hapticPath[Side.RIGHT]));
+    _ = try XrResult.init(c.xrStringToPath(instance, "/user/hand/left/output/haptic", &hapticPath[Side.LEFT]));
+    _ = try XrResult.init(c.xrStringToPath(instance, "/user/hand/right/output/haptic", &hapticPath[Side.RIGHT]));
     var menuClickPath: [Side.COUNT]c.XrPath = undefined;
-    CHECK_XRCMD(@src(), c.xrStringToPath(instance, "/user/hand/left/input/menu/click", &menuClickPath[Side.LEFT]));
-    CHECK_XRCMD(@src(), c.xrStringToPath(instance, "/user/hand/right/input/menu/click", &menuClickPath[Side.RIGHT]));
+    _ = try XrResult.init(c.xrStringToPath(instance, "/user/hand/left/input/menu/click", &menuClickPath[Side.LEFT]));
+    _ = try XrResult.init(c.xrStringToPath(instance, "/user/hand/right/input/menu/click", &menuClickPath[Side.RIGHT]));
     var bClickPath: [Side.COUNT]c.XrPath = undefined;
-    CHECK_XRCMD(@src(), c.xrStringToPath(instance, "/user/hand/left/input/b/click", &bClickPath[Side.LEFT]));
-    CHECK_XRCMD(@src(), c.xrStringToPath(instance, "/user/hand/right/input/b/click", &bClickPath[Side.RIGHT]));
+    _ = try XrResult.init(c.xrStringToPath(instance, "/user/hand/left/input/b/click", &bClickPath[Side.LEFT]));
+    _ = try XrResult.init(c.xrStringToPath(instance, "/user/hand/right/input/b/click", &bClickPath[Side.RIGHT]));
     var triggerValuePath: [Side.COUNT]c.XrPath = undefined;
-    CHECK_XRCMD(@src(), c.xrStringToPath(instance, "/user/hand/left/input/trigger/value", &triggerValuePath[Side.LEFT]));
-    CHECK_XRCMD(@src(), c.xrStringToPath(instance, "/user/hand/right/input/trigger/value", &triggerValuePath[Side.RIGHT]));
+    _ = try XrResult.init(c.xrStringToPath(instance, "/user/hand/left/input/trigger/value", &triggerValuePath[Side.LEFT]));
+    _ = try XrResult.init(c.xrStringToPath(instance, "/user/hand/right/input/trigger/value", &triggerValuePath[Side.RIGHT]));
 
     // Suggest bindings for KHR Simple.
     {
         var khrSimpleInteractionProfilePath: c.XrPath = undefined;
-        CHECK_XRCMD(@src(), c.xrStringToPath(instance, "/interaction_profiles/khr/simple_controller", &khrSimpleInteractionProfilePath));
+        _ = try XrResult.init(c.xrStringToPath(instance, "/interaction_profiles/khr/simple_controller", &khrSimpleInteractionProfilePath));
         // Fall back to a click input for the grab action.
         const bindings = [_]c.XrActionSuggestedBinding{
             .{ .action = m_input.grabAction, .binding = selectPath[Side.LEFT] },
@@ -142,12 +142,12 @@ pub fn InitializeActions(instance: c.XrInstance, session: c.XrSession) !void {
             .suggestedBindings = &bindings,
             .countSuggestedBindings = bindings.len,
         };
-        CHECK_XRCMD(@src(), c.xrSuggestInteractionProfileBindings(instance, &suggestedBindings));
+        _ = try XrResult.init(c.xrSuggestInteractionProfileBindings(instance, &suggestedBindings));
     }
     // Suggest bindings for the Oculus Touch.
     {
         var oculusTouchInteractionProfilePath: c.XrPath = undefined;
-        CHECK_XRCMD(@src(), c.xrStringToPath(instance, "/interaction_profiles/oculus/touch_controller", &oculusTouchInteractionProfilePath));
+        _ = try XrResult.init(c.xrStringToPath(instance, "/interaction_profiles/oculus/touch_controller", &oculusTouchInteractionProfilePath));
         const bindings = [_]c.XrActionSuggestedBinding{
             .{ .action = m_input.grabAction, .binding = squeezeValuePath[Side.LEFT] },
             .{ .action = m_input.grabAction, .binding = squeezeValuePath[Side.RIGHT] },
@@ -163,12 +163,12 @@ pub fn InitializeActions(instance: c.XrInstance, session: c.XrSession) !void {
             .suggestedBindings = &bindings,
             .countSuggestedBindings = bindings.len,
         };
-        CHECK_XRCMD(@src(), c.xrSuggestInteractionProfileBindings(instance, &suggestedBindings));
+        _ = try XrResult.init(c.xrSuggestInteractionProfileBindings(instance, &suggestedBindings));
     }
     // Suggest bindings for the Vive Controller.
     {
         var viveControllerInteractionProfilePath: c.XrPath = undefined;
-        CHECK_XRCMD(@src(), c.xrStringToPath(instance, "/interaction_profiles/htc/vive_controller", &viveControllerInteractionProfilePath));
+        _ = try XrResult.init(c.xrStringToPath(instance, "/interaction_profiles/htc/vive_controller", &viveControllerInteractionProfilePath));
         const bindings = [_]c.XrActionSuggestedBinding{
             .{ .action = m_input.grabAction, .binding = triggerValuePath[Side.LEFT] },
             .{ .action = m_input.grabAction, .binding = triggerValuePath[Side.RIGHT] },
@@ -185,12 +185,12 @@ pub fn InitializeActions(instance: c.XrInstance, session: c.XrSession) !void {
             .suggestedBindings = &bindings,
             .countSuggestedBindings = bindings.len,
         };
-        CHECK_XRCMD(@src(), c.xrSuggestInteractionProfileBindings(instance, &suggestedBindings));
+        _ = try XrResult.init(c.xrSuggestInteractionProfileBindings(instance, &suggestedBindings));
     }
     // Suggest bindings for the Valve Index Controller.
     {
         var indexControllerInteractionProfilePath: c.XrPath = undefined;
-        CHECK_XRCMD(@src(), c.xrStringToPath(instance, "/interaction_profiles/valve/index_controller", &indexControllerInteractionProfilePath));
+        _ = try XrResult.init(c.xrStringToPath(instance, "/interaction_profiles/valve/index_controller", &indexControllerInteractionProfilePath));
         const bindings = [_]c.XrActionSuggestedBinding{
             .{ .action = m_input.grabAction, .binding = squeezeForcePath[Side.LEFT] },
             .{ .action = m_input.grabAction, .binding = squeezeForcePath[Side.RIGHT] },
@@ -207,12 +207,12 @@ pub fn InitializeActions(instance: c.XrInstance, session: c.XrSession) !void {
             .suggestedBindings = &bindings,
             .countSuggestedBindings = bindings.len,
         };
-        CHECK_XRCMD(@src(), c.xrSuggestInteractionProfileBindings(instance, &suggestedBindings));
+        _ = try XrResult.init(c.xrSuggestInteractionProfileBindings(instance, &suggestedBindings));
     }
     // Suggest bindings for the Microsoft Mixed Reality Motion Controller.
     {
         var microsoftMixedRealityInteractionProfilePath: c.XrPath = undefined;
-        CHECK_XRCMD(@src(), c.xrStringToPath(instance, "/interaction_profiles/microsoft/motion_controller", &microsoftMixedRealityInteractionProfilePath));
+        _ = try XrResult.init(c.xrStringToPath(instance, "/interaction_profiles/microsoft/motion_controller", &microsoftMixedRealityInteractionProfilePath));
         const bindings = [_]c.XrActionSuggestedBinding{
             .{ .action = m_input.grabAction, .binding = squeezeClickPath[Side.LEFT] },
             .{ .action = m_input.grabAction, .binding = squeezeClickPath[Side.RIGHT] },
@@ -229,7 +229,7 @@ pub fn InitializeActions(instance: c.XrInstance, session: c.XrSession) !void {
             .suggestedBindings = &bindings,
             .countSuggestedBindings = bindings.len,
         };
-        CHECK_XRCMD(@src(), c.xrSuggestInteractionProfileBindings(instance, &suggestedBindings));
+        _ = try XrResult.init(c.xrSuggestInteractionProfileBindings(instance, &suggestedBindings));
     }
 
     var actionSpaceInfo: c.XrActionSpaceCreateInfo = .{
@@ -238,16 +238,16 @@ pub fn InitializeActions(instance: c.XrInstance, session: c.XrSession) !void {
         .poseInActionSpace = .{ .orientation = .{ .w = 1.0 } },
         .subactionPath = m_input.handSubactionPath[Side.LEFT],
     };
-    CHECK_XRCMD(@src(), c.xrCreateActionSpace(session, &actionSpaceInfo, &m_input.handSpace[Side.LEFT]));
+    _ = try XrResult.init(c.xrCreateActionSpace(session, &actionSpaceInfo, &m_input.handSpace[Side.LEFT]));
     actionSpaceInfo.subactionPath = m_input.handSubactionPath[Side.RIGHT];
-    CHECK_XRCMD(@src(), c.xrCreateActionSpace(session, &actionSpaceInfo, &m_input.handSpace[Side.RIGHT]));
+    _ = try XrResult.init(c.xrCreateActionSpace(session, &actionSpaceInfo, &m_input.handSpace[Side.RIGHT]));
 
     var attachInfo: c.XrSessionActionSetsAttachInfo = .{
         .type = c.XR_TYPE_SESSION_ACTION_SETS_ATTACH_INFO,
         .countActionSets = 1,
         .actionSets = &m_input.actionSet,
     };
-    CHECK_XRCMD(@src(), c.xrAttachSessionActionSets(session, &attachInfo));
+    _ = try XrResult.init(c.xrAttachSessionActionSets(session, &attachInfo));
 }
 
 pub fn LogEvent(allocator: std.mem.Allocator, session: c.XrSession) !void {
@@ -268,11 +268,11 @@ fn LogActionSourceName(
         .action = action,
     };
     var pathCount: u32 = 0;
-    CHECK_XRCMD(@src(), c.xrEnumerateBoundSourcesForAction(session, &getInfo, 0, &pathCount, null));
+    _ = try XrResult.init(c.xrEnumerateBoundSourcesForAction(session, &getInfo, 0, &pathCount, null));
 
     const paths = try allocator.alloc(c.XrPath, pathCount);
     defer allocator.free(paths);
-    CHECK_XRCMD(@src(), c.xrEnumerateBoundSourcesForAction(session, &getInfo, @intCast(paths.len), &pathCount, paths.ptr));
+    _ = try XrResult.init(c.xrEnumerateBoundSourcesForAction(session, &getInfo, @intCast(paths.len), &pathCount, paths.ptr));
 
     var sourceName: std.ArrayList(u8) = .{};
     defer sourceName.deinit(allocator);
@@ -287,13 +287,13 @@ fn LogActionSourceName(
             .whichComponents = all,
         };
         var size: u32 = 0;
-        CHECK_XRCMD(@src(), c.xrGetInputSourceLocalizedName(session, &nameInfo, 0, &size, null));
+        _ = try XrResult.init(c.xrGetInputSourceLocalizedName(session, &nameInfo, 0, &size, null));
         if (size < 1) {
             continue;
         }
         var grabSource = try allocator.alloc(u8, size);
         defer allocator.free(grabSource);
-        CHECK_XRCMD(@src(), c.xrGetInputSourceLocalizedName(session, &nameInfo, @intCast(grabSource.len), &size, grabSource.ptr));
+        _ = try XrResult.init(c.xrGetInputSourceLocalizedName(session, &nameInfo, @intCast(grabSource.len), &size, grabSource.ptr));
         if (sourceName.items.len > 0) {
             try sourceName.appendSlice(allocator, " and ");
         }
@@ -308,7 +308,7 @@ fn LogActionSourceName(
     });
 }
 
-pub fn PollActions(session: c.XrSession) void {
+pub fn PollActions(session: c.XrSession) XrError!void {
     m_input.handActive = .{ c.XR_FALSE, c.XR_FALSE };
 
     // Sync actions
@@ -318,7 +318,7 @@ pub fn PollActions(session: c.XrSession) void {
         .countActiveActionSets = 1,
         .activeActionSets = &activeActionSet,
     };
-    CHECK_XRCMD(@src(), c.xrSyncActions(session, &syncInfo));
+    _ = try XrResult.init(c.xrSyncActions(session, &syncInfo));
 
     // Get pose and grab action state and start haptic vibrate when hand is 90% squeezed.
     for (hands) |hand| {
@@ -328,7 +328,7 @@ pub fn PollActions(session: c.XrSession) void {
             .subactionPath = m_input.handSubactionPath[hand],
         };
         var grabValue: c.XrActionStateFloat = .{ .type = c.XR_TYPE_ACTION_STATE_FLOAT };
-        CHECK_XRCMD(@src(), c.xrGetActionStateFloat(session, &getInfo, &grabValue));
+        _ = try XrResult.init(c.xrGetActionStateFloat(session, &getInfo, &grabValue));
         if (grabValue.isActive == c.XR_TRUE) {
             // Scale the rendered hand by 1.0f (open) to 0.5f (fully squeezed).
             m_input.handScale[hand] = 1.0 - 0.5 * grabValue.currentState;
@@ -344,13 +344,13 @@ pub fn PollActions(session: c.XrSession) void {
                     .action = m_input.vibrateAction,
                     .subactionPath = m_input.handSubactionPath[hand],
                 };
-                CHECK_XRCMD(@src(), c.xrApplyHapticFeedback(session, &hapticActionInfo, @ptrCast(&vibration)));
+                _ = try XrResult.init(c.xrApplyHapticFeedback(session, &hapticActionInfo, @ptrCast(&vibration)));
             }
         }
 
         getInfo.action = m_input.poseAction;
         var poseState: c.XrActionStatePose = .{ .type = c.XR_TYPE_ACTION_STATE_POSE };
-        CHECK_XRCMD(@src(), c.xrGetActionStatePose(session, &getInfo, &poseState));
+        _ = try XrResult.init(c.xrGetActionStatePose(session, &getInfo, &poseState));
         m_input.handActive[hand] = poseState.isActive;
     }
 
@@ -362,8 +362,8 @@ pub fn PollActions(session: c.XrSession) void {
         .subactionPath = c.XR_NULL_PATH,
     };
     var quitValue: c.XrActionStateBoolean = .{ .type = c.XR_TYPE_ACTION_STATE_BOOLEAN };
-    CHECK_XRCMD(@src(), c.xrGetActionStateBoolean(session, &getInfo, &quitValue));
+    _ = try XrResult.init(c.xrGetActionStateBoolean(session, &getInfo, &quitValue));
     if ((quitValue.isActive == c.XR_TRUE) and (quitValue.changedSinceLastSync == c.XR_TRUE) and (quitValue.currentState == c.XR_TRUE)) {
-        CHECK_XRCMD(@src(), c.xrRequestExitSession(session));
+        _ = try XrResult.init(c.xrRequestExitSession(session));
     }
 }

@@ -1,7 +1,8 @@
 const std = @import("std");
 const builtin = @import("builtin");
-const xr_util = @import("../xr_util.zig");
-const CHECK_XRCMD = xr_util.CHECK_XRCMD;
+const xr_util = @import("xr_util");
+const XrError = xr_util.XrError;
+const XrResult = xr_util.XrResult;
 const geometry = @import("../geometry.zig");
 const Cube = @import("../Cube.zig");
 const Options = @import("../Options.zig");
@@ -108,13 +109,13 @@ pub fn deinit(allocator: std.mem.Allocator) void {
 //         Log::Write(Log::Level::Info, "GLES Debug: " + std::string(message, 0, length));
 //     }
 
-pub fn InitializeDevice(instance: c.XrInstance, systemId: c.XrSystemId) void {
+pub fn InitializeDevice(instance: c.XrInstance, systemId: c.XrSystemId) XrError!void {
     // Extension function must be loaded by name
     var pfn: c.PFN_xrGetOpenGLESGraphicsRequirementsKHR = undefined;
-    CHECK_XRCMD(@src(), c.xrGetInstanceProcAddr(instance, "xrGetOpenGLESGraphicsRequirementsKHR", &pfn));
+    _ = try XrResult.init(c.xrGetInstanceProcAddr(instance, "xrGetOpenGLESGraphicsRequirementsKHR", &pfn));
 
     var graphicsRequirements: c.XrGraphicsRequirementsOpenGLESKHR = .{ .type = c.XR_TYPE_GRAPHICS_REQUIREMENTS_OPENGL_ES_KHR };
-    CHECK_XRCMD(@src(), pfn.?(instance, systemId, &graphicsRequirements));
+    _ = try XrResult.init(pfn.?(instance, systemId, &graphicsRequirements));
 
     gfxwrapper_opengl.init();
 

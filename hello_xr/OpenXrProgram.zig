@@ -1,9 +1,8 @@
 const std = @import("std");
-const CHECK_XRCMD = xr_util.CHECK_XRCMD;
-const CHECK_XRRESULT = xr_util.CHECK_XRRESULT;
 const binding = @import("binding.zig");
-const xr_util = binding.xr_util;
-const xr_result = binding.xr_result;
+const xr_util = @import("xr_util");
+const XrError = xr_util.XrError;
+const XrResult = xr_util.XrResult;
 const Options = binding.Options;
 const c = @import("c");
 const Cube = binding.Cube;
@@ -11,12 +10,12 @@ const geometry = binding.geometry;
 const action = @import("action.zig");
 
 var version_str: [64]u8 = undefined;
-fn GetXrVersionString(ver: c.XrVersion) ![]const u8 {
-    return try std.fmt.bufPrint(&version_str, "{}.{}.{}", .{
+fn GetXrVersionString(ver: c.XrVersion) []const u8 {
+    return std.fmt.bufPrint(&version_str, "{}.{}.{}", .{
         c.XR_VERSION_MAJOR(ver),
         c.XR_VERSION_MINOR(ver),
         c.XR_VERSION_PATCH(ver),
-    });
+    }) catch @panic("OOM");
 }
 
 var m_options: *Options = undefined;
@@ -101,10 +100,10 @@ fn makeIndent(allocator: std.mem.Allocator, indent: usize) ![]const u8 {
 }
 
 // Write out extension properties for a given layer.
-fn logExtensions(allocator: std.mem.Allocator, _layerName: []const u8, indent: usize) !void {
+fn logExtensions(allocator: std.mem.Allocator, _layerName: []const u8, indent: usize) XrError!void {
     const layerName = if (_layerName.len > 0) _layerName.ptr else null;
     var instanceExtensionCount: u32 = undefined;
-    CHECK_XRCMD(@src(), c.xrEnumerateInstanceExtensionProperties(layerName, 0, &instanceExtensionCount, null));
+    _ = try XrResult.init(c.xrEnumerateInstanceExtensionProperties(layerName, 0, &instanceExtensionCount, null));
     const extensions = try allocator.alloc(c.XrExtensionProperties, instanceExtensionCount);
     defer allocator.free(extensions);
     for (extensions) |*ext| {
@@ -112,7 +111,7 @@ fn logExtensions(allocator: std.mem.Allocator, _layerName: []const u8, indent: u
             .type = c.XR_TYPE_EXTENSION_PROPERTIES,
         };
     }
-    CHECK_XRCMD(@src(), c.xrEnumerateInstanceExtensionProperties(layerName, @intCast(extensions.len), &instanceExtensionCount, extensions.ptr));
+    _ = try XrResult.init(c.xrEnumerateInstanceExtensionProperties(layerName, @intCast(extensions.len), &instanceExtensionCount, extensions.ptr));
 
     const indentStr = try makeIndent(allocator, indent);
     defer allocator.free(indentStr);
@@ -126,26 +125,26 @@ fn logExtensions(allocator: std.mem.Allocator, _layerName: []const u8, indent: u
     }
 }
 
-fn LogLayersAndExtensions(allocator: std.mem.Allocator) !void {
+fn LogLayersAndExtensions(allocator: std.mem.Allocator) XrError!void {
 
     // Log non-layer extensions (layerName==nullptr).
-    try logExtensions(allocator, &.{}, 0);
+    _ = try logExtensions(allocator, &.{}, 0);
 
     // Log layers and any of their extensions.
     {
         var layerCount: u32 = undefined;
-        CHECK_XRCMD(@src(), c.xrEnumerateApiLayerProperties(0, &layerCount, null));
+        _ = try XrResult.init(c.xrEnumerateApiLayerProperties(0, &layerCount, null));
         const layers = try allocator.alloc(c.XrApiLayerProperties, layerCount);
         defer allocator.free(layers);
         for (layers) |*l| {
             l.* = .{ .type = c.XR_TYPE_API_LAYER_PROPERTIES };
         }
-        CHECK_XRCMD(@src(), c.xrEnumerateApiLayerProperties(@intCast(layers.len), &layerCount, layers.ptr));
+        _ = try XrResult.init(c.xrEnumerateApiLayerProperties(@intCast(layers.len), &layerCount, layers.ptr));
         std.log.info("Available Layers: ({})", .{layerCount});
         for (layers) |layer| {
             std.log.debug("  Name={s} SpecVersion={s} LayerVersion={} Description={s}", .{
                 layer.layerName,
-                try GetXrVersionString(layer.specVersion),
+                GetXrVersionString(layer.specVersion),
                 layer.layerVersion,
                 layer.description,
             });
@@ -154,7 +153,7 @@ fn LogLayersAndExtensions(allocator: std.mem.Allocator) !void {
     }
 }
 
-fn CreateInstanceInternal(allocator: std.mem.Allocator, instance_create_info: ?*const anyopaque) !void {
+fn CreateInstanceInternal(allocator: std.mem.Allocator, instance_create_info: ?*const anyopaque) XrError!void {
     std.debug.assert(m_instance == null);
 
     const platform_extensions = binding.platform.GetInstanceExtensions();
@@ -182,23 +181,23 @@ fn CreateInstanceInternal(allocator: std.mem.Allocator, instance_create_info: ?*
         .applicationInfo = .{},
     };
 
-    _ = try std.fmt.bufPrintZ(&createInfo.applicationInfo.applicationName, "{s}", .{"HelloXR"});
+    _ = std.fmt.bufPrintZ(&createInfo.applicationInfo.applicationName, "{s}", .{"HelloXR"}) catch @panic("OOM");
 
     // Current version is 1.1.x, but hello_xr only requires 1.0.x
     createInfo.applicationInfo.apiVersion = c.XR_API_VERSION_1_0;
 
-    CHECK_XRCMD(@src(), c.xrCreateInstance(&createInfo, &m_instance));
+    _ = try XrResult.init(c.xrCreateInstance(&createInfo, &m_instance));
 }
 
-fn LogInstanceInfo() !void {
+fn LogInstanceInfo() XrError!void {
     std.debug.assert(m_instance != null);
 
     var instanceProperties: c.XrInstanceProperties = .{ .type = c.XR_TYPE_INSTANCE_PROPERTIES };
-    CHECK_XRCMD(@src(), c.xrGetInstanceProperties(m_instance, &instanceProperties));
+    _ = try XrResult.init(c.xrGetInstanceProperties(m_instance, &instanceProperties));
 
     std.log.info("Instance RuntimeName={s} RuntimeVersion={s}", .{
         instanceProperties.runtimeName,
-        try GetXrVersionString(instanceProperties.runtimeVersion),
+        GetXrVersionString(instanceProperties.runtimeVersion),
     });
 }
 
@@ -208,19 +207,19 @@ pub fn CreateInstance(allocator: std.mem.Allocator, instance_create_info: ?*cons
     try LogInstanceInfo();
 }
 
-fn LogEnvironmentBlendMode(allocator: std.mem.Allocator, _type: c.XrViewConfigurationType) !void {
+fn LogEnvironmentBlendMode(allocator: std.mem.Allocator, _type: c.XrViewConfigurationType) XrError!void {
     std.debug.assert(m_instance != null);
     std.debug.assert(m_systemId != 0);
 
     var count: u32 = undefined;
-    CHECK_XRCMD(@src(), c.xrEnumerateEnvironmentBlendModes(m_instance, m_systemId, _type, 0, &count, null));
+    _ = try XrResult.init(c.xrEnumerateEnvironmentBlendModes(m_instance, m_systemId, _type, 0, &count, null));
     std.debug.assert(count > 0);
 
     std.log.info("Available Environment Blend Mode count : ({})", .{count});
 
     const blendModes = try allocator.alloc(c.XrEnvironmentBlendMode, count);
     defer allocator.free(blendModes);
-    CHECK_XRCMD(@src(), c.xrEnumerateEnvironmentBlendModes(m_instance, m_systemId, _type, count, &count, blendModes.ptr));
+    _ = try XrResult.init(c.xrEnumerateEnvironmentBlendModes(m_instance, m_systemId, _type, count, &count, blendModes.ptr));
 
     var blendModeFound = false;
     for (blendModes) |mode| {
@@ -239,12 +238,12 @@ const m_acceptableBlendModes = [_]c.XrEnvironmentBlendMode{
 
 pub fn GetPreferredBlendMode(allocator: std.mem.Allocator) !c.XrEnvironmentBlendMode {
     var count: u32 = undefined;
-    CHECK_XRCMD(@src(), c.xrEnumerateEnvironmentBlendModes(m_instance, m_systemId, m_options.parsed.ViewConfigType, 0, &count, null));
+    _ = try XrResult.init(c.xrEnumerateEnvironmentBlendModes(m_instance, m_systemId, m_options.parsed.ViewConfigType, 0, &count, null));
     std.debug.assert(count > 0);
 
     const blendModes = try allocator.alloc(c.XrEnvironmentBlendMode, count);
     defer allocator.free(blendModes);
-    CHECK_XRCMD(@src(), c.xrEnumerateEnvironmentBlendModes(m_instance, m_systemId, m_options.parsed.ViewConfigType, count, &count, blendModes.ptr));
+    _ = try XrResult.init(c.xrEnumerateEnvironmentBlendModes(m_instance, m_systemId, m_options.parsed.ViewConfigType, count, &count, blendModes.ptr));
     for (blendModes) |blendMode| {
         for (m_acceptableBlendModes) |mode| {
             if (blendMode == mode) {
@@ -252,11 +251,12 @@ pub fn GetPreferredBlendMode(allocator: std.mem.Allocator) !c.XrEnvironmentBlend
             }
         }
     }
+
     // THROW("No acceptable blend mode returned from the xrEnumerateEnvironmentBlendModes");
     return error.NoAcceptableBlendMode;
 }
 
-pub fn InitializeSystem() void {
+pub fn InitializeSystem() XrError!void {
     std.debug.assert(m_instance != null);
     std.debug.assert(m_systemId == c.XR_NULL_SYSTEM_ID);
 
@@ -264,7 +264,7 @@ pub fn InitializeSystem() void {
         .type = c.XR_TYPE_SYSTEM_GET_INFO,
         .formFactor = m_options.parsed.FormFactor,
     };
-    CHECK_XRCMD(@src(), c.xrGetSystem(m_instance, &systemInfo, &m_systemId));
+    _ = try XrResult.init(c.xrGetSystem(m_instance, &systemInfo, &m_systemId));
 
     std.log.debug("Using system {} for form factor {}", .{
         m_systemId,
@@ -274,15 +274,15 @@ pub fn InitializeSystem() void {
     std.debug.assert(m_systemId != c.XR_NULL_SYSTEM_ID);
 }
 
-fn LogViewConfigurations(allocator: std.mem.Allocator) !void {
+fn LogViewConfigurations(allocator: std.mem.Allocator) XrError!void {
     std.debug.assert(m_instance != null);
     std.debug.assert(m_systemId != c.XR_NULL_SYSTEM_ID);
 
     var viewConfigTypeCount: u32 = undefined;
-    CHECK_XRCMD(@src(), c.xrEnumerateViewConfigurations(m_instance, m_systemId, 0, &viewConfigTypeCount, null));
+    _ = try XrResult.init(c.xrEnumerateViewConfigurations(m_instance, m_systemId, 0, &viewConfigTypeCount, null));
     const viewConfigTypes = try allocator.alloc(c.XrViewConfigurationType, viewConfigTypeCount);
     defer allocator.free(viewConfigTypes);
-    CHECK_XRCMD(@src(), c.xrEnumerateViewConfigurations(m_instance, m_systemId, viewConfigTypeCount, &viewConfigTypeCount, viewConfigTypes.ptr));
+    _ = try XrResult.init(c.xrEnumerateViewConfigurations(m_instance, m_systemId, viewConfigTypeCount, &viewConfigTypeCount, viewConfigTypes.ptr));
     std.debug.assert(viewConfigTypes.len == viewConfigTypeCount);
 
     std.log.info("Available View Configuration Types: ({})", .{viewConfigTypeCount});
@@ -293,21 +293,21 @@ fn LogViewConfigurations(allocator: std.mem.Allocator) !void {
         });
 
         var viewConfigProperties: c.XrViewConfigurationProperties = .{ .type = c.XR_TYPE_VIEW_CONFIGURATION_PROPERTIES };
-        CHECK_XRCMD(@src(), c.xrGetViewConfigurationProperties(m_instance, m_systemId, viewConfigType, &viewConfigProperties));
+        _ = try XrResult.init(c.xrGetViewConfigurationProperties(m_instance, m_systemId, viewConfigType, &viewConfigProperties));
 
         std.log.debug("  View configuration FovMutable={s}", .{
             if (viewConfigProperties.fovMutable == c.XR_TRUE) "True" else "False",
         });
 
         var viewCount: u32 = undefined;
-        CHECK_XRCMD(@src(), c.xrEnumerateViewConfigurationViews(m_instance, m_systemId, viewConfigType, 0, &viewCount, null));
+        _ = try XrResult.init(c.xrEnumerateViewConfigurationViews(m_instance, m_systemId, viewConfigType, 0, &viewCount, null));
         if (viewCount > 0) {
             const views = try allocator.alloc(c.XrViewConfigurationView, viewCount);
             defer allocator.free(views);
             for (views) |*view| {
                 view.* = .{ .type = c.XR_TYPE_VIEW_CONFIGURATION_VIEW };
             }
-            CHECK_XRCMD(@src(), c.xrEnumerateViewConfigurationViews(m_instance, m_systemId, viewConfigType, viewCount, &viewCount, views.ptr));
+            _ = try XrResult.init(c.xrEnumerateViewConfigurationViews(m_instance, m_systemId, viewConfigType, viewCount, &viewCount, views.ptr));
 
             for (views, 0..) |view, i| {
                 std.log.debug("    View [{}]: Recommended Width={} Height={} SampleCount={}", .{
@@ -334,17 +334,17 @@ pub fn InitializeDevice(allocator: std.mem.Allocator) !void {
 
     // The graphics API can initialize the graphics device now that the systemId and instance
     // handle are available.
-    binding.gfx.InitializeDevice(m_instance, m_systemId);
+    try binding.gfx.InitializeDevice(m_instance, m_systemId);
 }
 
-fn LogReferenceSpaces(allocator: std.mem.Allocator) !void {
+fn LogReferenceSpaces(allocator: std.mem.Allocator) XrError!void {
     std.debug.assert(m_session != null);
 
     var spaceCount: u32 = undefined;
-    CHECK_XRCMD(@src(), c.xrEnumerateReferenceSpaces(m_session, 0, &spaceCount, null));
+    _ = try XrResult.init(c.xrEnumerateReferenceSpaces(m_session, 0, &spaceCount, null));
     const spaces = try allocator.alloc(c.XrReferenceSpaceType, spaceCount);
     defer allocator.free(spaces);
-    CHECK_XRCMD(@src(), c.xrEnumerateReferenceSpaces(m_session, spaceCount, &spaceCount, spaces.ptr));
+    _ = try XrResult.init(c.xrEnumerateReferenceSpaces(m_session, spaceCount, &spaceCount, spaces.ptr));
 
     std.log.info("Available reference spaces: {}", .{spaceCount});
     for (spaces) |space| {
@@ -371,7 +371,7 @@ fn CreateVisualizedSpaces(allocator: std.mem.Allocator) !void {
     }
 }
 
-pub fn InitializeSession(allocator: std.mem.Allocator) !c.XrSession {
+pub fn InitializeSession(allocator: std.mem.Allocator) XrError!c.XrSession {
     std.debug.assert(m_instance != null);
     std.debug.assert(m_session == null);
 
@@ -383,7 +383,7 @@ pub fn InitializeSession(allocator: std.mem.Allocator) !c.XrSession {
             .next = binding.gfx.GetGraphicsBinding(),
             .systemId = m_systemId,
         };
-        CHECK_XRCMD(@src(), c.xrCreateSession(m_instance, &createInfo, &m_session));
+        _ = try XrResult.init(c.xrCreateSession(m_instance, &createInfo, &m_session));
     }
 
     try LogReferenceSpaces(allocator);
@@ -392,20 +392,20 @@ pub fn InitializeSession(allocator: std.mem.Allocator) !c.XrSession {
 
     {
         const referenceSpaceCreateInfo = geometry.GetXrReferenceSpaceCreateInfo(m_options.AppSpace.span());
-        CHECK_XRCMD(@src(), c.xrCreateReferenceSpace(m_session, &referenceSpaceCreateInfo, &m_appSpace));
+        _ = try XrResult.init(c.xrCreateReferenceSpace(m_session, &referenceSpaceCreateInfo, &m_appSpace));
     }
 
     return m_session;
 }
 
-pub fn CreateSwapchains(allocator: std.mem.Allocator) !void {
+pub fn CreateSwapchains(allocator: std.mem.Allocator) XrError!void {
     std.debug.assert(m_session != null);
     std.debug.assert(m_swapchains.items.len == 0);
     std.debug.assert(m_configViews.items.len == 0);
 
     // Read graphics properties for preferred swapchain length and logging.
     var systemProperties: c.XrSystemProperties = .{ .type = c.XR_TYPE_SYSTEM_PROPERTIES };
-    CHECK_XRCMD(@src(), c.xrGetSystemProperties(m_instance, m_systemId, &systemProperties));
+    _ = try XrResult.init(c.xrGetSystemProperties(m_instance, m_systemId, &systemProperties));
 
     // Log system properties.
     std.log.info("System Properties: Name={s} VendorId={}", .{
@@ -428,12 +428,12 @@ pub fn CreateSwapchains(allocator: std.mem.Allocator) !void {
 
     // Query and cache view configuration views.
     var viewCount: u32 = undefined;
-    CHECK_XRCMD(@src(), c.xrEnumerateViewConfigurationViews(m_instance, m_systemId, m_options.parsed.ViewConfigType, 0, &viewCount, null));
+    _ = try XrResult.init(c.xrEnumerateViewConfigurationViews(m_instance, m_systemId, m_options.parsed.ViewConfigType, 0, &viewCount, null));
     try m_configViews.resize(allocator, viewCount);
     for (m_configViews.items) |*item| {
         item.* = .{ .type = c.XR_TYPE_VIEW_CONFIGURATION_VIEW };
     }
-    CHECK_XRCMD(@src(), c.xrEnumerateViewConfigurationViews(
+    _ = try XrResult.init(c.xrEnumerateViewConfigurationViews(
         m_instance,
         m_systemId,
         m_options.parsed.ViewConfigType,
@@ -452,10 +452,10 @@ pub fn CreateSwapchains(allocator: std.mem.Allocator) !void {
     if (viewCount > 0) {
         // Select a swapchain format.
         var swapchainFormatCount: u32 = undefined;
-        CHECK_XRCMD(@src(), c.xrEnumerateSwapchainFormats(m_session, 0, &swapchainFormatCount, null));
+        _ = try XrResult.init(c.xrEnumerateSwapchainFormats(m_session, 0, &swapchainFormatCount, null));
         const swapchainFormats = try allocator.alloc(i64, swapchainFormatCount);
         defer allocator.free(swapchainFormats);
-        CHECK_XRCMD(@src(), c.xrEnumerateSwapchainFormats(
+        _ = try XrResult.init(c.xrEnumerateSwapchainFormats(
             m_session,
             @intCast(swapchainFormats.len),
             &swapchainFormatCount,
@@ -474,16 +474,16 @@ pub fn CreateSwapchains(allocator: std.mem.Allocator) !void {
 
             for (swapchainFormats) |format| {
                 const selected = format == m_colorSwapchainFormat;
-                try w.writeAll(" ");
+                w.writeAll(" ") catch @panic("OOM");
                 if (selected) {
-                    try w.writeAll("[");
+                    w.writeAll("[") catch @panic("OOM");
                 }
-                try w.print("{}", .{format});
+                w.print("{}", .{format}) catch @panic("OM");
                 if (selected) {
-                    try w.writeAll("]");
+                    w.writeAll("]") catch @panic("OOM");
                 }
             }
-            const str = try out.toOwnedSlice();
+            const str = out.toOwnedSlice() catch @panic("OOM");
             defer allocator.free(str);
             std.log.debug("Swapchain Formats: {s}", .{str});
         }
@@ -515,16 +515,16 @@ pub fn CreateSwapchains(allocator: std.mem.Allocator) !void {
                 .width = swapchainCreateInfo.width,
                 .height = swapchainCreateInfo.height,
             };
-            CHECK_XRCMD(@src(), c.xrCreateSwapchain(m_session, &swapchainCreateInfo, &swapchain.handle));
+            _ = try XrResult.init(c.xrCreateSwapchain(m_session, &swapchainCreateInfo, &swapchain.handle));
 
             try m_swapchains.append(allocator, swapchain);
 
             var imageCount: u32 = undefined;
-            CHECK_XRCMD(@src(), c.xrEnumerateSwapchainImages(swapchain.handle, 0, &imageCount, null));
+            _ = try XrResult.init(c.xrEnumerateSwapchainImages(swapchain.handle, 0, &imageCount, null));
             // XXX This should really just return XrSwapchainImageBaseHeader*
             const swapchainImages = try allocator.alloc(*c.XrSwapchainImageBaseHeader, imageCount);
             try binding.gfx.AllocateSwapchainImageStructs(allocator, swapchainImages);
-            CHECK_XRCMD(@src(), c.xrEnumerateSwapchainImages(swapchain.handle, imageCount, &imageCount, swapchainImages[0]));
+            _ = try XrResult.init(c.xrEnumerateSwapchainImages(swapchain.handle, imageCount, &imageCount, swapchainImages[0]));
 
             try m_swapchainImages.put(swapchain.handle, swapchainImages);
         }
@@ -555,7 +555,7 @@ fn HandleSessionStateChangedEvent(
     stateChangedEvent: *c.XrEventDataSessionStateChanged,
     exitRenderLoop: *bool,
     requestRestart: *bool,
-) void {
+) XrError!void {
     const oldState = m_sessionState;
     m_sessionState = stateChangedEvent.state;
 
@@ -578,13 +578,13 @@ fn HandleSessionStateChangedEvent(
                 .type = c.XR_TYPE_SESSION_BEGIN_INFO,
             };
             sessionBeginInfo.primaryViewConfigurationType = m_options.parsed.ViewConfigType;
-            CHECK_XRCMD(@src(), c.xrBeginSession(m_session, &sessionBeginInfo));
+            _ = try XrResult.init(c.xrBeginSession(m_session, &sessionBeginInfo));
             m_sessionRunning = true;
         },
         c.XR_SESSION_STATE_STOPPING => {
             std.debug.assert(m_session != null);
             m_sessionRunning = false;
-            CHECK_XRCMD(@src(), c.xrEndSession(m_session));
+            _ = try XrResult.init(c.xrEndSession(m_session));
         },
         c.XR_SESSION_STATE_EXITING => {
             exitRenderLoop.* = true;
@@ -620,7 +620,7 @@ pub fn PollEvents(
             },
             c.XR_TYPE_EVENT_DATA_SESSION_STATE_CHANGED => {
                 const sessionStateChangedEvent: *c.XrEventDataSessionStateChanged = @ptrCast(event);
-                HandleSessionStateChangedEvent(sessionStateChangedEvent, exitRenderLoop, requestRestart);
+                try HandleSessionStateChangedEvent(sessionStateChangedEvent, exitRenderLoop, requestRestart);
             },
             c.XR_TYPE_EVENT_DATA_INTERACTION_PROFILE_CHANGED => {
                 try action.LogEvent(allocator, m_session);
@@ -657,7 +657,7 @@ fn RenderLayer(
         .space = m_appSpace,
     };
 
-    CHECK_XRCMD(@src(), c.xrLocateViews(m_session, &viewLocateInfo, &viewState, viewCapacityInput, &viewCountOutput, m_views.items.ptr));
+    _ = try XrResult.init(c.xrLocateViews(m_session, &viewLocateInfo, &viewState, viewCapacityInput, &viewCountOutput, m_views.items.ptr));
     if ((viewState.viewStateFlags & c.XR_VIEW_STATE_POSITION_VALID_BIT) == 0 or
         (viewState.viewStateFlags & c.XR_VIEW_STATE_ORIENTATION_VALID_BIT) == 0)
     {
@@ -675,9 +675,8 @@ fn RenderLayer(
     defer cubes.deinit(allocator);
     for (m_visualizedSpaces.items) |visualizedSpace| {
         var spaceLocation: c.XrSpaceLocation = .{ .type = c.XR_TYPE_SPACE_LOCATION };
-        const res = c.xrLocateSpace(visualizedSpace, m_appSpace, predictedDisplayTime, &spaceLocation);
-        CHECK_XRCMD(@src(), res);
-        if (c.XR_UNQUALIFIED_SUCCESS(res)) {
+        const res = try XrResult.init(c.xrLocateSpace(visualizedSpace, m_appSpace, predictedDisplayTime, &spaceLocation));
+        if (res == .Success) {
             if ((spaceLocation.locationFlags & c.XR_SPACE_LOCATION_POSITION_VALID_BIT) != 0 and
                 (spaceLocation.locationFlags & c.XR_SPACE_LOCATION_ORIENTATION_VALID_BIT) != 0)
             {
@@ -693,9 +692,8 @@ fn RenderLayer(
     const hands = [2]usize{ action.Side.LEFT, action.Side.RIGHT };
     for (hands) |hand| {
         var spaceLocation: c.XrSpaceLocation = .{ .type = c.XR_TYPE_SPACE_LOCATION };
-        const res = c.xrLocateSpace(action.m_input.handSpace[hand], m_appSpace, predictedDisplayTime, &spaceLocation);
-        CHECK_XRRESULT(@src(), res, "xrLocateSpace");
-        if (c.XR_UNQUALIFIED_SUCCESS(res)) {
+        const res = try XrResult.init(c.xrLocateSpace(action.m_input.handSpace[hand], m_appSpace, predictedDisplayTime, &spaceLocation));
+        if (res == .Success) {
             if ((spaceLocation.locationFlags & c.XR_SPACE_LOCATION_POSITION_VALID_BIT) != 0 and
                 (spaceLocation.locationFlags & c.XR_SPACE_LOCATION_ORIENTATION_VALID_BIT) != 0)
             {
@@ -717,13 +715,13 @@ fn RenderLayer(
         // Each view has a separate swapchain which is acquired, rendered to, and released.
         var acquireInfo: c.XrSwapchainImageAcquireInfo = .{ .type = c.XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO };
         var swapchainImageIndex: u32 = undefined;
-        CHECK_XRCMD(@src(), c.xrAcquireSwapchainImage(viewSwapchain.handle, &acquireInfo, &swapchainImageIndex));
+        _ = try XrResult.init(c.xrAcquireSwapchainImage(viewSwapchain.handle, &acquireInfo, &swapchainImageIndex));
 
         var waitInfo: c.XrSwapchainImageWaitInfo = .{
             .type = c.XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO,
             .timeout = c.XR_INFINITE_DURATION,
         };
-        CHECK_XRCMD(@src(), c.xrWaitSwapchainImage(viewSwapchain.handle, &waitInfo));
+        _ = try XrResult.init(c.xrWaitSwapchainImage(viewSwapchain.handle, &waitInfo));
 
         projectionLayerViews.items[i] = .{
             .type = c.XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW,
@@ -743,7 +741,7 @@ fn RenderLayer(
         try binding.gfx.RenderView(&projectionLayerViews.items[i], swapchainImage, m_colorSwapchainFormat, cubes.items);
 
         var releaseInfo: c.XrSwapchainImageReleaseInfo = .{ .type = c.XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO };
-        CHECK_XRCMD(@src(), c.xrReleaseSwapchainImage(viewSwapchain.handle, &releaseInfo));
+        _ = try XrResult.init(c.xrReleaseSwapchainImage(viewSwapchain.handle, &releaseInfo));
     }
 
     layer.space = m_appSpace;
@@ -756,15 +754,15 @@ fn RenderLayer(
     return true;
 }
 
-pub fn RenderFrame(allocator: std.mem.Allocator) !void {
+pub fn RenderFrame(allocator: std.mem.Allocator) XrError!void {
     std.debug.assert(m_session != null);
 
     var frameWaitInfo: c.XrFrameWaitInfo = .{ .type = c.XR_TYPE_FRAME_WAIT_INFO };
     var frameState: c.XrFrameState = .{ .type = c.XR_TYPE_FRAME_STATE };
-    CHECK_XRCMD(@src(), c.xrWaitFrame(m_session, &frameWaitInfo, &frameState));
+    _ = try XrResult.init(c.xrWaitFrame(m_session, &frameWaitInfo, &frameState));
 
     var frameBeginInfo: c.XrFrameBeginInfo = .{ .type = c.XR_TYPE_FRAME_BEGIN_INFO };
-    CHECK_XRCMD(@src(), c.xrBeginFrame(m_session, &frameBeginInfo));
+    _ = try XrResult.init(c.xrBeginFrame(m_session, &frameBeginInfo));
 
     var layers: std.ArrayList(*c.XrCompositionLayerBaseHeader) = .{};
     defer layers.deinit(allocator);
@@ -789,5 +787,5 @@ pub fn RenderFrame(allocator: std.mem.Allocator) !void {
         .layerCount = @intCast(layers.items.len),
         .layers = layers.items.ptr,
     };
-    CHECK_XRCMD(@src(), c.xrEndFrame(m_session, &frameEndInfo));
+    _ = try XrResult.init(c.xrEndFrame(m_session, &frameEndInfo));
 }

@@ -1,8 +1,7 @@
 const builtin = @import("builtin");
 pub const Options = @import("Options.zig");
 pub const geometry = @import("geometry.zig");
-pub const xr_result = @import("xr_result.zig");
-pub const xr_util = @import("xr_util.zig");
+pub const xr_util = @import("xr_util");
 pub const Cube = @import("Cube.zig");
 
 pub const gfx = if (builtin.target.os.tag == .windows)
