@@ -1,8 +1,7 @@
 const std = @import("std");
 const OpenXrProgram = @import("OpenXrProgram.zig");
 const action = @import("action.zig");
-const binding = @import("binding.zig");
-const Options = binding.Options;
+const Options = @import("Options.zig");
 
 pub const std_options: std.Options = .{
     .logFn = logFn,

@@ -1,6 +1,5 @@
 const std = @import("std");
 const c = @import("c");
-const binding = @import("binding.zig");
 const xr_util = @import("xr_util");
 const XrError = xr_util.XrError;
 const XrResult = xr_util.XrResult;

@@ -1,12 +1,16 @@
 const std = @import("std");
-const binding = @import("binding.zig");
+const builtin = @import("builtin");
+const gfx = if (builtin.os.tag == .windows)
+    @import("gfx/graphicsplugin_opengl.zig")
+else
+    @import("gfx/graphicsplugin_opengles.zig");
 const xr_util = @import("xr_util");
 const XrError = xr_util.XrError;
 const XrResult = xr_util.XrResult;
-const Options = binding.Options;
+const Options = @import("Options.zig");
 const c = @import("c");
-const Cube = binding.Cube;
-const geometry = binding.geometry;
+const Cube = @import("Cube.zig");
+const geometry = @import("geometry.zig");
 const action = @import("action.zig");
 
 var version_str: [64]u8 = undefined;
@@ -47,7 +51,7 @@ var m_eventDataBuffer: c.XrEventDataBuffer = undefined;
 pub fn init(allocator: std.mem.Allocator, options: *Options) void {
     m_options = options;
     m_swapchainImages = .init(allocator);
-    binding.gfx.init(allocator, options);
+    gfx.init(allocator, options);
     // platformplugin.UpdateOptions(options);
     // graphicsplugin.UpdateOptions(options);
     action.init();
@@ -56,7 +60,7 @@ pub fn init(allocator: std.mem.Allocator, options: *Options) void {
 pub fn deinit(allocator: std.mem.Allocator) void {
     action.deinit();
 
-    binding.gfx.deinit(allocator);
+    gfx.deinit(allocator);
     {
         var it = m_swapchainImages.iterator();
         while (it.next()) |item| {
@@ -156,17 +160,11 @@ fn LogLayersAndExtensions(allocator: std.mem.Allocator) XrError!void {
 fn CreateInstanceInternal(allocator: std.mem.Allocator, instance_create_info: ?*const anyopaque) XrError!void {
     std.debug.assert(m_instance == null);
 
-    const platform_extensions = binding.platform.GetInstanceExtensions();
-    const gfx_extensions = binding.gfx.GetInstanceExtensions();
+    const gfx_extensions = gfx.GetInstanceExtensions();
 
     // Create union of extensions required by platform and graphics plugins.
     var extensions: std.ArrayList([*:0]const u8) = .{};
     defer extensions.deinit(allocator);
-    for (platform_extensions, 0..) |e, i| {
-        const p: [*:0]const u8 = @ptrCast(e);
-        std.log.info("PLATFORM[{}]extension: {s}", .{ i, std.mem.span(p) });
-        try extensions.append(allocator, e);
-    }
     for (gfx_extensions, 0..) |e, i| {
         const p: [*:0]const u8 = @ptrCast(e);
         std.log.info("GFX[{}]extension: {s}", .{ i, std.mem.span(p) });
@@ -334,7 +332,7 @@ pub fn InitializeDevice(allocator: std.mem.Allocator) !void {
 
     // The graphics API can initialize the graphics device now that the systemId and instance
     // handle are available.
-    try binding.gfx.InitializeDevice(m_instance, m_systemId);
+    try gfx.InitializeDevice(m_instance, m_systemId);
 }
 
 fn LogReferenceSpaces(allocator: std.mem.Allocator) XrError!void {
@@ -380,7 +378,7 @@ pub fn InitializeSession(allocator: std.mem.Allocator) XrError!c.XrSession {
 
         var createInfo: c.XrSessionCreateInfo = .{
             .type = c.XR_TYPE_SESSION_CREATE_INFO,
-            .next = binding.gfx.GetGraphicsBinding(),
+            .next = gfx.GetGraphicsBinding(),
             .systemId = m_systemId,
         };
         _ = try XrResult.init(c.xrCreateSession(m_instance, &createInfo, &m_session));
@@ -462,7 +460,7 @@ pub fn CreateSwapchains(allocator: std.mem.Allocator) XrError!void {
             swapchainFormats.ptr,
         ));
         std.debug.assert(swapchainFormatCount == swapchainFormats.len);
-        m_colorSwapchainFormat = try binding.gfx.SelectColorSwapchainFormat(allocator, swapchainFormats);
+        m_colorSwapchainFormat = try gfx.SelectColorSwapchainFormat(allocator, swapchainFormats);
 
         // Print swapchain formats and the selected one.
         {
@@ -506,7 +504,7 @@ pub fn CreateSwapchains(allocator: std.mem.Allocator) XrError!void {
                 .height = vp.recommendedImageRectHeight,
                 .mipCount = 1,
                 .faceCount = 1,
-                .sampleCount = binding.gfx.GetSupportedSwapchainSampleCount(&vp),
+                .sampleCount = gfx.GetSupportedSwapchainSampleCount(&vp),
                 .usageFlags = c.XR_SWAPCHAIN_USAGE_SAMPLED_BIT | c.XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT,
             };
 
@@ -523,7 +521,7 @@ pub fn CreateSwapchains(allocator: std.mem.Allocator) XrError!void {
             _ = try XrResult.init(c.xrEnumerateSwapchainImages(swapchain.handle, 0, &imageCount, null));
             // XXX This should really just return XrSwapchainImageBaseHeader*
             const swapchainImages = try allocator.alloc(*c.XrSwapchainImageBaseHeader, imageCount);
-            try binding.gfx.AllocateSwapchainImageStructs(allocator, swapchainImages);
+            try gfx.AllocateSwapchainImageStructs(allocator, swapchainImages);
             _ = try XrResult.init(c.xrEnumerateSwapchainImages(swapchain.handle, imageCount, &imageCount, swapchainImages[0]));
 
             try m_swapchainImages.put(swapchain.handle, swapchainImages);
@@ -738,7 +736,7 @@ fn RenderLayer(
 
         const entry = m_swapchainImages.get(viewSwapchain.handle).?;
         const swapchainImage: *c.XrSwapchainImageBaseHeader = entry[swapchainImageIndex];
-        try binding.gfx.RenderView(&projectionLayerViews.items[i], swapchainImage, m_colorSwapchainFormat, cubes.items);
+        try gfx.RenderView(&projectionLayerViews.items[i], swapchainImage, m_colorSwapchainFormat, cubes.items);
 
         var releaseInfo: c.XrSwapchainImageReleaseInfo = .{ .type = c.XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO };
         _ = try XrResult.init(c.xrReleaseSwapchainImage(viewSwapchain.handle, &releaseInfo));
