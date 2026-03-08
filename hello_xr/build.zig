@@ -7,6 +7,7 @@ const PKG_NAME = "com.zig." ++ BUILD_NAME;
 const API_LEVEL = 35;
 
 const LIBS_WINDOWS = [_][]const u8{
+    "user32",
     "gdi32",
     "kernel32",
     "opengl32",
@@ -151,22 +152,62 @@ pub fn build(b: *std.Build) !void {
         );
         exe.root_module.addImport("c", c_mod);
 
-        const openxr_loader = zbk.cpp.CMakeStep.create(b, .{
-            .source = openxr_dep.path("").getPath(b),
-            .target = target,
-            .use_vcenv = b.graph.host.result.os.tag == .windows,
-            .args = if (target.result.os.tag == .windows) &.{"-DDYNAMIC_LOADER=ON"} else &.{},
+        // const openxr_loader = zbk.cpp.CMakeStep.create(b, .{
+        //     .source = openxr_dep.path("").getPath(b),
+        //     .target = target,
+        //     .use_vcenv = b.graph.host.result.os.tag == .windows,
+        //     .args = if (target.result.os.tag == .windows) &.{"-DDYNAMIC_LOADER=ON"} else &.{},
+        // });
+        // if (target.result.os.tag == .windows) {
+        //     // copy dll
+        //     const dll = b.addInstallBinFile(
+        //         openxr_loader.getInstallPrefix().path(b, "bin/openxr_loader.dll"),
+        //         "openxr_loader.dll",
+        //     );
+        //     b.getInstallStep().dependOn(&dll.step);
+        // }
+        // exe.addLibraryPath(openxr_loader.getInstallPrefix().path(b, "lib"));
+        // exe.linkSystemLibrary("openxr_loader");
+        const openxr_flags: []const []const u8 = if (target.result.os.tag == .windows)
+            &.{
+                "-DXR_OS_WINDOWS",
+                "-DNOMINMAX",
+                "-DXR_USE_PLATFORM_WIN32",
+            }
+        else if (target.result.abi.isAndroid())
+            &.{"-DXR_OS_ANDROID"}
+        else
+            &.{"-DXR_OS_LINUX"};
+        exe.addCSourceFiles(.{
+            .root = openxr_dep.path("src"),
+            .files = &.{
+                "loader/android_utilities.cpp",
+                "loader/api_layer_interface.cpp",
+                "loader/loader_core.cpp",
+                "loader/loader_init_data.cpp",
+                "loader/loader_instance.cpp",
+                "loader/loader_logger.cpp",
+                "loader/loader_logger_recorders.cpp",
+                "loader/loader_properties.cpp",
+                "loader/manifest_file.cpp",
+                "loader/runtime_interface.cpp",
+                "common/object_info.cpp",
+                "common/filesystem_utils.cpp",
+                //
+                "xr_generated_dispatch_table.c",
+                "xr_generated_dispatch_table_core.c",
+                "loader/xr_generated_loader.cpp",
+                //
+                "external/jsoncpp/src/lib_json/json_reader.cpp",
+                "external/jsoncpp/src/lib_json/json_writer.cpp",
+                "external/jsoncpp/src/lib_json/json_value.cpp",
+            },
+            .flags = openxr_flags,
         });
-        if (target.result.os.tag == .windows) {
-            // copy dll
-            const dll = b.addInstallBinFile(
-                openxr_loader.getInstallPrefix().path(b, "bin/openxr_loader.dll"),
-                "openxr_loader.dll",
-            );
-            b.getInstallStep().dependOn(&dll.step);
-        }
-        exe.addLibraryPath(openxr_loader.getInstallPrefix().path(b, "lib"));
-        exe.linkSystemLibrary("openxr_loader");
+        exe.addIncludePath(openxr_dep.path("src/external/jsoncpp/include"));
+        exe.addIncludePath(openxr_dep.path("src/common"));
+        exe.addIncludePath(openxr_dep.path("src"));
+        exe.addIncludePath(openxr_dep.path("include"));
 
         const srcs = [_][]const u8{
             "gl.c",
@@ -185,7 +226,7 @@ pub fn build(b: *std.Build) !void {
             else
                 srcs ++ srcs_wayland),
             .flags = &.{
-                "-DGLAD_GLES2",
+                // "-DGLAD_GLES2",
             },
         });
         exe.addIncludePath(b.path("glad2/include"));
