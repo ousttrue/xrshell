@@ -16,27 +16,19 @@ pub fn logFn(
 ) void {
     const prefix = if (scope == .default) "" else "(" ++ @tagName(scope) ++ "): ";
 
-    var buf = std.io.FixedBufferStream([4 * 1024]u8){
-        .buffer = undefined,
-        .pos = 0,
+    var buf: [1024]u8 = undefined;
+    const msg = std.fmt.bufPrint(&buf, prefix ++ format, args) catch {
+        return;
     };
-    var writer = buf.writer();
-    writer.print(prefix ++ format, args) catch {};
-
-    if (buf.pos >= buf.buffer.len) {
-        buf.pos = buf.buffer.len - 1;
-    }
-    buf.buffer[buf.pos] = 0;
 
     const CSI = "\x1B[";
     const begin = switch (message_level) {
-        .debug => CSI ++ "37m",
-        .info => CSI ++ "33m",
-        .warn => CSI ++ "35m",
-        .err => CSI ++ "31m",
+        .debug => CSI ++ "37m[Debug]",
+        .info => CSI ++ "33m[Info ]",
+        .warn => CSI ++ "35m[Warn ]",
+        .err => CSI ++ "31m[Error]",
     };
-
-    std.debug.print("{s}{s}{s}0m\n", .{ begin, &buf.buffer, CSI });
+    std.debug.print("{s}{s}{s}0m\n", .{ begin, msg, CSI });
 }
 
 var quitKeyPressed = false;
