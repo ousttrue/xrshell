@@ -1,6 +1,8 @@
 const std = @import("std");
 const c = @import("c");
 const xr_util = @import("xr_util");
+const XrError = xr_util.XrError;
+const XrResult = xr_util.XrResult;
 // const CHECK_XRCMD = xr_util.CHECK_XRCMD;
 const geometry = @import("../geometry.zig");
 const Options = @import("../Options.zig");
@@ -184,13 +186,13 @@ fn initializeResources() void {
     c.glVertexAttribPointer(m_vertexAttribColor, 3, c.GL_FLOAT, c.GL_FALSE, @sizeOf(geometry.Vertex), @ptrFromInt(@sizeOf(c.XrVector3f)));
 }
 
-pub fn InitializeDevice(instance: c.XrInstance, systemId: c.XrSystemId) xr_util.XrError!void {
+pub fn InitializeDevice(instance: c.XrInstance, systemId: c.XrSystemId) XrError!void {
     // Extension function must be loaded by name
     var pfnGetOpenGLGraphicsRequirementsKHR: c.PFN_xrGetOpenGLGraphicsRequirementsKHR = undefined;
-    _ = try xr_util.check(c.xrGetInstanceProcAddr(instance, "xrGetOpenGLGraphicsRequirementsKHR", &pfnGetOpenGLGraphicsRequirementsKHR));
+    _ = try XrResult.init(c.xrGetInstanceProcAddr(instance, "xrGetOpenGLGraphicsRequirementsKHR", &pfnGetOpenGLGraphicsRequirementsKHR));
 
     var graphicsRequirements: c.XrGraphicsRequirementsOpenGLKHR = .{ .type = c.XR_TYPE_GRAPHICS_REQUIREMENTS_OPENGL_KHR };
-    _ = try xr_util.check((pfnGetOpenGLGraphicsRequirementsKHR.?)(instance, systemId, &graphicsRequirements));
+    _ = try XrResult.init((pfnGetOpenGLGraphicsRequirementsKHR.?)(instance, systemId, &graphicsRequirements));
 
     gfxwrapper_opengl.init();
 

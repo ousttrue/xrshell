@@ -180,7 +180,10 @@ export fn android_main(app: *c.android_app) void {
     };
 
     OpenXrProgram.CreateInstance(allocator, &instanceCreateInfoAndroid) catch @panic("OpenXrProgram.CreateInstance");
-    OpenXrProgram.InitializeSystem();
+    OpenXrProgram.InitializeSystem() catch |e| {
+        std.log.err("InitializeSystem => {s}", .{@errorName(e)});
+        return;
+    };
 
     options.SetEnvironmentBlendMode(OpenXrProgram.GetPreferredBlendMode(allocator) catch @panic("OpenXrProgram.GetPreferredBlendMode"));
     _ = UpdateOptionsFromSystemProperties(&options);
@@ -221,7 +224,9 @@ export fn android_main(app: *c.android_app) void {
             continue;
         }
 
-        action.PollActions(session);
+        action.PollActions(session) catch |e| {
+            std.log.err("PollActions => {s}", .{@errorName(e)});
+        };
         OpenXrProgram.RenderFrame(allocator) catch @panic("OpenXrProgram.RenderFrame");
     }
 
