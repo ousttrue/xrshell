@@ -4,6 +4,42 @@ const action = @import("action.zig");
 const binding = @import("binding.zig");
 const Options = binding.Options;
 
+pub const std_options: std.Options = .{
+    .logFn = logFn,
+    .log_level = .debug,
+};
+
+pub fn logFn(
+    comptime message_level: std.log.Level,
+    comptime scope: @Type(.enum_literal),
+    comptime format: []const u8,
+    args: anytype,
+) void {
+    const prefix = if (scope == .default) "" else "(" ++ @tagName(scope) ++ "): ";
+
+    var buf = std.io.FixedBufferStream([4 * 1024]u8){
+        .buffer = undefined,
+        .pos = 0,
+    };
+    var writer = buf.writer();
+    writer.print(prefix ++ format, args) catch {};
+
+    if (buf.pos >= buf.buffer.len) {
+        buf.pos = buf.buffer.len - 1;
+    }
+    buf.buffer[buf.pos] = 0;
+
+    const CSI = "\x1B[";
+    const begin = switch (message_level) {
+        .debug => CSI ++ "37m",
+        .info => CSI ++ "33m",
+        .warn => CSI ++ "35m",
+        .err => CSI ++ "31m",
+    };
+
+    std.debug.print("{s}{s}{s}0m\n", .{ begin, &buf.buffer, CSI });
+}
+
 var quitKeyPressed = false;
 
 fn gets() void {
