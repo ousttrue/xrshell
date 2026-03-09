@@ -47,7 +47,6 @@ var m_sessionState: c.XrSessionState = c.XR_SESSION_STATE_UNKNOWN;
 var m_sessionRunning: bool = false;
 
 var m_eventDataBuffer: c.XrEventDataBuffer = undefined;
-var m_layers: std.ArrayList(*c.XrCompositionLayerBaseHeader) = .{};
 var m_projectionLayerViews: std.ArrayList(c.XrCompositionLayerProjectionView) = .{};
 
 pub fn init(allocator: std.mem.Allocator, options: *Options) void {
@@ -61,7 +60,6 @@ pub fn init(allocator: std.mem.Allocator, options: *Options) void {
 
 pub fn deinit(allocator: std.mem.Allocator) void {
     m_projectionLayerViews.deinit(allocator);
-    m_layers.deinit(allocator);
     action.deinit();
 
     gfx.deinit(allocator);
@@ -648,29 +646,12 @@ fn RenderLayer(
     predictedDisplayTime: c.XrTime,
     projectionLayerViews: *std.ArrayList(c.XrCompositionLayerProjectionView),
     layer: *c.XrCompositionLayerProjection,
-) !bool {
-    var viewState: c.XrViewState = .{ .type = c.XR_TYPE_VIEW_STATE };
-    const viewCapacityInput: u32 = @intCast(m_views.items.len);
-    var viewCountOutput: u32 = undefined;
-    var viewLocateInfo: c.XrViewLocateInfo = .{
-        .type = c.XR_TYPE_VIEW_LOCATE_INFO,
-        .viewConfigurationType = m_options.parsed.ViewConfigType,
-        .displayTime = predictedDisplayTime,
-        .space = m_appSpace,
-    };
+) !void {
+    // std.debug.assert(viewCountOutput == viewCapacityInput);
+    // std.debug.assert(viewCountOutput == m_configViews.items.len);
+    // std.debug.assert(viewCountOutput == m_swapchains.items.len);
 
-    _ = try XrResult.init(c.xrLocateViews(m_session, &viewLocateInfo, &viewState, viewCapacityInput, &viewCountOutput, m_views.items.ptr));
-    if ((viewState.viewStateFlags & c.XR_VIEW_STATE_POSITION_VALID_BIT) == 0 or
-        (viewState.viewStateFlags & c.XR_VIEW_STATE_ORIENTATION_VALID_BIT) == 0)
-    {
-        return false; // There is no valid tracking poses for the views.
-    }
-
-    std.debug.assert(viewCountOutput == viewCapacityInput);
-    std.debug.assert(viewCountOutput == m_configViews.items.len);
-    std.debug.assert(viewCountOutput == m_swapchains.items.len);
-
-    try projectionLayerViews.resize(allocator, viewCountOutput);
+    try projectionLayerViews.resize(allocator, m_views.items.len);
 
     // For each locatable space that we want to visualize, render a 25cm cube.
     var cubes: std.ArrayList(Cube) = .{};
@@ -753,21 +734,20 @@ fn RenderLayer(
         0;
     layer.viewCount = @intCast(projectionLayerViews.items.len);
     layer.views = projectionLayerViews.items.ptr;
-    return true;
 }
 
-fn endFrame(predictedDisplayTime: c.XrTime) !void {
+fn endFrame(predictedDisplayTime: c.XrTime, maybe_layer: ?*c.XrCompositionLayerBaseHeader) !void {
     var frameEndInfo: c.XrFrameEndInfo = .{
         .type = c.XR_TYPE_FRAME_END_INFO,
         .displayTime = predictedDisplayTime,
         .environmentBlendMode = m_options.parsed.EnvironmentBlendMode,
-        .layerCount = @intCast(m_layers.items.len),
-        .layers = m_layers.items.ptr,
+        .layerCount = if (maybe_layer != null) 1 else 0,
+        .layers = if (maybe_layer) |layer| &layer else null,
     };
     _ = try XrResult.init(c.xrEndFrame(m_session, &frameEndInfo));
 }
 
-fn beginFrame(allocator: std.mem.Allocator) !c.XrFrameState {
+fn beginFrame() !c.XrFrameState {
     var frameWaitInfo: c.XrFrameWaitInfo = .{ .type = c.XR_TYPE_FRAME_WAIT_INFO };
     var frameState: c.XrFrameState = .{ .type = c.XR_TYPE_FRAME_STATE };
     _ = try XrResult.init(c.xrWaitFrame(m_session, &frameWaitInfo, &frameState));
@@ -775,26 +755,47 @@ fn beginFrame(allocator: std.mem.Allocator) !c.XrFrameState {
     var frameBeginInfo: c.XrFrameBeginInfo = .{ .type = c.XR_TYPE_FRAME_BEGIN_INFO };
     _ = try XrResult.init(c.xrBeginFrame(m_session, &frameBeginInfo));
 
-    try m_layers.resize(allocator, 0);
-
     return frameState;
+}
+
+fn locate(predictedDisplayTime: c.XrTime) !bool {
+    var viewState: c.XrViewState = .{ .type = c.XR_TYPE_VIEW_STATE };
+    const viewCapacityInput: u32 = @intCast(m_views.items.len);
+    var viewCountOutput: u32 = undefined;
+    var viewLocateInfo: c.XrViewLocateInfo = .{
+        .type = c.XR_TYPE_VIEW_LOCATE_INFO,
+        .viewConfigurationType = m_options.parsed.ViewConfigType,
+        .displayTime = predictedDisplayTime,
+        .space = m_appSpace,
+    };
+
+    _ = try XrResult.init(c.xrLocateViews(m_session, &viewLocateInfo, &viewState, viewCapacityInput, &viewCountOutput, m_views.items.ptr));
+    if ((viewState.viewStateFlags & c.XR_VIEW_STATE_POSITION_VALID_BIT) == 0 or
+        (viewState.viewStateFlags & c.XR_VIEW_STATE_ORIENTATION_VALID_BIT) == 0)
+    {
+        return false; // There is no valid tracking poses for the views.
+    } else {
+        return true;
+    }
 }
 
 pub fn RenderFrame(allocator: std.mem.Allocator) XrError!void {
     std.debug.assert(m_session != null);
 
-    const frameState = try beginFrame(allocator);
+    const frameState = try beginFrame();
     var layer: c.XrCompositionLayerProjection = .{ .type = c.XR_TYPE_COMPOSITION_LAYER_PROJECTION };
+    var layer_enable = false;
     if (frameState.shouldRender == c.XR_TRUE) {
-        if (try RenderLayer(
-            allocator,
-            frameState.predictedDisplayTime,
-            &m_projectionLayerViews,
-            &layer,
-        )) {
-            try m_layers.append(allocator, @ptrCast(&layer));
+        if (try locate(frameState.predictedDisplayTime)) {
+            try RenderLayer(
+                allocator,
+                frameState.predictedDisplayTime,
+                &m_projectionLayerViews,
+                &layer,
+            );
+            layer_enable = true;
         }
     }
 
-    try endFrame(frameState.predictedDisplayTime);
+    try endFrame(frameState.predictedDisplayTime, if (layer_enable) @ptrCast(&layer) else null);
 }
