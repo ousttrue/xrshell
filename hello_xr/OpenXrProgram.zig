@@ -47,6 +47,8 @@ var m_sessionState: c.XrSessionState = c.XR_SESSION_STATE_UNKNOWN;
 var m_sessionRunning: bool = false;
 
 var m_eventDataBuffer: c.XrEventDataBuffer = undefined;
+var m_layers: std.ArrayList(*c.XrCompositionLayerBaseHeader) = .{};
+var m_projectionLayerViews: std.ArrayList(c.XrCompositionLayerProjectionView) = .{};
 
 pub fn init(allocator: std.mem.Allocator, options: *Options) void {
     m_options = options;
@@ -58,6 +60,8 @@ pub fn init(allocator: std.mem.Allocator, options: *Options) void {
 }
 
 pub fn deinit(allocator: std.mem.Allocator) void {
+    m_projectionLayerViews.deinit(allocator);
+    m_layers.deinit(allocator);
     action.deinit();
 
     gfx.deinit(allocator);
@@ -752,9 +756,18 @@ fn RenderLayer(
     return true;
 }
 
-pub fn RenderFrame(allocator: std.mem.Allocator) XrError!void {
-    std.debug.assert(m_session != null);
+fn endFrame(predictedDisplayTime: c.XrTime) !void {
+    var frameEndInfo: c.XrFrameEndInfo = .{
+        .type = c.XR_TYPE_FRAME_END_INFO,
+        .displayTime = predictedDisplayTime,
+        .environmentBlendMode = m_options.parsed.EnvironmentBlendMode,
+        .layerCount = @intCast(m_layers.items.len),
+        .layers = m_layers.items.ptr,
+    };
+    _ = try XrResult.init(c.xrEndFrame(m_session, &frameEndInfo));
+}
 
+fn beginFrame(allocator: std.mem.Allocator) !c.XrFrameState {
     var frameWaitInfo: c.XrFrameWaitInfo = .{ .type = c.XR_TYPE_FRAME_WAIT_INFO };
     var frameState: c.XrFrameState = .{ .type = c.XR_TYPE_FRAME_STATE };
     _ = try XrResult.init(c.xrWaitFrame(m_session, &frameWaitInfo, &frameState));
@@ -762,28 +775,26 @@ pub fn RenderFrame(allocator: std.mem.Allocator) XrError!void {
     var frameBeginInfo: c.XrFrameBeginInfo = .{ .type = c.XR_TYPE_FRAME_BEGIN_INFO };
     _ = try XrResult.init(c.xrBeginFrame(m_session, &frameBeginInfo));
 
-    var layers: std.ArrayList(*c.XrCompositionLayerBaseHeader) = .{};
-    defer layers.deinit(allocator);
+    try m_layers.resize(allocator, 0);
+
+    return frameState;
+}
+
+pub fn RenderFrame(allocator: std.mem.Allocator) XrError!void {
+    std.debug.assert(m_session != null);
+
+    const frameState = try beginFrame(allocator);
     var layer: c.XrCompositionLayerProjection = .{ .type = c.XR_TYPE_COMPOSITION_LAYER_PROJECTION };
-    var projectionLayerViews: std.ArrayList(c.XrCompositionLayerProjectionView) = .{};
-    defer projectionLayerViews.deinit(allocator);
     if (frameState.shouldRender == c.XR_TRUE) {
         if (try RenderLayer(
             allocator,
             frameState.predictedDisplayTime,
-            &projectionLayerViews,
+            &m_projectionLayerViews,
             &layer,
         )) {
-            try layers.append(allocator, @ptrCast(&layer));
+            try m_layers.append(allocator, @ptrCast(&layer));
         }
     }
 
-    var frameEndInfo: c.XrFrameEndInfo = .{
-        .type = c.XR_TYPE_FRAME_END_INFO,
-        .displayTime = frameState.predictedDisplayTime,
-        .environmentBlendMode = m_options.parsed.EnvironmentBlendMode,
-        .layerCount = @intCast(layers.items.len),
-        .layers = layers.items.ptr,
-    };
-    _ = try XrResult.init(c.xrEndFrame(m_session, &frameEndInfo));
+    try endFrame(frameState.predictedDisplayTime);
 }
