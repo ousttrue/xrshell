@@ -27,6 +27,7 @@ var m_instance: c.XrInstance = null;
 var m_session: c.XrSession = null;
 var m_appSpace: c.XrSpace = null;
 var m_systemId: c.XrSystemId = c.XR_NULL_SYSTEM_ID;
+var m_layer: c.XrCompositionLayerProjection = .{ .type = c.XR_TYPE_COMPOSITION_LAYER_PROJECTION };
 
 const Swapchain = struct {
     handle: c.XrSwapchain,
@@ -641,17 +642,15 @@ pub fn IsSessionFocused() bool {
     return m_sessionState == c.XR_SESSION_STATE_FOCUSED;
 }
 
-fn RenderLayer(
+pub fn RenderLayer(
     allocator: std.mem.Allocator,
     predictedDisplayTime: c.XrTime,
-    projectionLayerViews: *std.ArrayList(c.XrCompositionLayerProjectionView),
-    layer: *c.XrCompositionLayerProjection,
-) !void {
+) !*c.XrCompositionLayerBaseHeader {
     // std.debug.assert(viewCountOutput == viewCapacityInput);
     // std.debug.assert(viewCountOutput == m_configViews.items.len);
     // std.debug.assert(viewCountOutput == m_swapchains.items.len);
 
-    try projectionLayerViews.resize(allocator, m_views.items.len);
+    try m_projectionLayerViews.resize(allocator, m_views.items.len);
 
     // For each locatable space that we want to visualize, render a 25cm cube.
     var cubes: std.ArrayList(Cube) = .{};
@@ -706,7 +705,7 @@ fn RenderLayer(
         };
         _ = try XrResult.init(c.xrWaitSwapchainImage(viewSwapchain.handle, &waitInfo));
 
-        projectionLayerViews.items[i] = .{
+        m_projectionLayerViews.items[i] = .{
             .type = c.XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW,
             .pose = m_views.items[i].pose,
             .fov = m_views.items[i].fov,
@@ -721,22 +720,26 @@ fn RenderLayer(
 
         const entry = m_swapchainImages.get(viewSwapchain.handle).?;
         const swapchainImage: *c.XrSwapchainImageBaseHeader = entry[swapchainImageIndex];
-        try gfx.RenderView(&projectionLayerViews.items[i], swapchainImage, m_colorSwapchainFormat, cubes.items);
+        try gfx.RenderView(&m_projectionLayerViews.items[i], swapchainImage, m_colorSwapchainFormat, cubes.items);
 
         var releaseInfo: c.XrSwapchainImageReleaseInfo = .{ .type = c.XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO };
         _ = try XrResult.init(c.xrReleaseSwapchainImage(viewSwapchain.handle, &releaseInfo));
     }
 
-    layer.space = m_appSpace;
-    layer.layerFlags = if (m_options.parsed.EnvironmentBlendMode == c.XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND)
-        c.XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT | c.XR_COMPOSITION_LAYER_UNPREMULTIPLIED_ALPHA_BIT
-    else
-        0;
-    layer.viewCount = @intCast(projectionLayerViews.items.len);
-    layer.views = projectionLayerViews.items.ptr;
+    m_layer = .{
+        .type = c.XR_TYPE_COMPOSITION_LAYER_PROJECTION,
+        .space = m_appSpace,
+        .layerFlags = if (m_options.parsed.EnvironmentBlendMode == c.XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND)
+            c.XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT | c.XR_COMPOSITION_LAYER_UNPREMULTIPLIED_ALPHA_BIT
+        else
+            0,
+        .viewCount = @intCast(m_projectionLayerViews.items.len),
+        .views = m_projectionLayerViews.items.ptr,
+    };
+    return @ptrCast(&m_layer);
 }
 
-fn endFrame(predictedDisplayTime: c.XrTime, maybe_layer: ?*c.XrCompositionLayerBaseHeader) !void {
+pub fn endFrame(predictedDisplayTime: c.XrTime, maybe_layer: ?*c.XrCompositionLayerBaseHeader) !void {
     var frameEndInfo: c.XrFrameEndInfo = .{
         .type = c.XR_TYPE_FRAME_END_INFO,
         .displayTime = predictedDisplayTime,
@@ -747,7 +750,7 @@ fn endFrame(predictedDisplayTime: c.XrTime, maybe_layer: ?*c.XrCompositionLayerB
     _ = try XrResult.init(c.xrEndFrame(m_session, &frameEndInfo));
 }
 
-fn beginFrame() !c.XrFrameState {
+pub fn beginFrame() !c.XrFrameState {
     var frameWaitInfo: c.XrFrameWaitInfo = .{ .type = c.XR_TYPE_FRAME_WAIT_INFO };
     var frameState: c.XrFrameState = .{ .type = c.XR_TYPE_FRAME_STATE };
     _ = try XrResult.init(c.xrWaitFrame(m_session, &frameWaitInfo, &frameState));
@@ -758,7 +761,7 @@ fn beginFrame() !c.XrFrameState {
     return frameState;
 }
 
-fn locate(predictedDisplayTime: c.XrTime) !bool {
+pub fn locate(predictedDisplayTime: c.XrTime) !bool {
     var viewState: c.XrViewState = .{ .type = c.XR_TYPE_VIEW_STATE };
     const viewCapacityInput: u32 = @intCast(m_views.items.len);
     var viewCountOutput: u32 = undefined;
@@ -777,25 +780,4 @@ fn locate(predictedDisplayTime: c.XrTime) !bool {
     } else {
         return true;
     }
-}
-
-pub fn RenderFrame(allocator: std.mem.Allocator) XrError!void {
-    std.debug.assert(m_session != null);
-
-    const frameState = try beginFrame();
-    var layer: c.XrCompositionLayerProjection = .{ .type = c.XR_TYPE_COMPOSITION_LAYER_PROJECTION };
-    var layer_enable = false;
-    if (frameState.shouldRender == c.XR_TRUE) {
-        if (try locate(frameState.predictedDisplayTime)) {
-            try RenderLayer(
-                allocator,
-                frameState.predictedDisplayTime,
-                &m_projectionLayerViews,
-                &layer,
-            );
-            layer_enable = true;
-        }
-    }
-
-    try endFrame(frameState.predictedDisplayTime, if (layer_enable) @ptrCast(&layer) else null);
 }

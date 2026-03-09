@@ -1,4 +1,5 @@
 const std = @import("std");
+const c = @import("c");
 const OpenXrProgram = @import("OpenXrProgram.zig");
 const action = @import("action.zig");
 const Options = @import("Options.zig");
@@ -83,7 +84,18 @@ pub fn main() !void {
 
             if (OpenXrProgram.IsSessionRunning()) {
                 try action.PollActions(session);
-                try OpenXrProgram.RenderFrame(allocator);
+                // try OpenXrProgram.oRenderFrame(allocator);
+                const frameState = try OpenXrProgram.beginFrame();
+                var layer: ?*c.XrCompositionLayerBaseHeader = null;
+                if (frameState.shouldRender == c.XR_TRUE) {
+                    if (try OpenXrProgram.locate(frameState.predictedDisplayTime)) {
+                        layer = try OpenXrProgram.RenderLayer(
+                            allocator,
+                            frameState.predictedDisplayTime,
+                        );
+                    }
+                }
+                try OpenXrProgram.endFrame(frameState.predictedDisplayTime, layer);
             } else {
                 // Throttle loop since xrWaitFrame won't be called.
                 std.Thread.sleep(std.time.ns_per_ms * 250);
