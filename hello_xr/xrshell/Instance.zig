@@ -7,6 +7,8 @@ const xr_util = @import("xr_util.zig");
 
 instance: c.XrInstance = null,
 systemId: c.XrSystemId = c.XR_NULL_SYSTEM_ID,
+eventDataBuffer: c.XrEventDataBuffer = undefined,
+sessionState: c.XrSessionState = c.XR_SESSION_STATE_UNKNOWN,
 
 var version_str: [64]u8 = undefined;
 
@@ -91,4 +93,94 @@ pub fn deinit(this: *@This()) void {
     if (this.instance) |handle| {
         _ = c.xrDestroyInstance(handle);
     }
+}
+
+pub fn IsSessionFocused(this: *@This()) bool {
+    return this.m_sessionState == c.XR_SESSION_STATE_FOCUSED;
+}
+
+pub const EventNext = enum {
+    next,
+    quit,
+    restart,
+    session_begin,
+    session_end,
+};
+
+pub fn pollEvents(
+    this: *@This(),
+    // view_config_type: c.XrViewConfigurationType,
+    // session: c.XrSession,
+) !EventNext {
+    // Process all pending messages.
+    while (this.tryReadNextEvent()) |event| {
+        switch (event.type) {
+            c.XR_TYPE_EVENT_DATA_INSTANCE_LOSS_PENDING => {
+                // https://registry.khronos.org/OpenXR/specs/1.0/man/html/XrEventDataInstanceLossPending.html
+                const instanceLossPending: *c.XrEventDataInstanceLossPending = @ptrCast(event);
+                std.log.warn("XrEventDataInstanceLossPending by {}", .{instanceLossPending.lossTime});
+                return .restart;
+            },
+            c.XR_TYPE_EVENT_DATA_SESSION_STATE_CHANGED => {
+                const stateChangedEvent: *c.XrEventDataSessionStateChanged = @ptrCast(event);
+                const oldState = this.sessionState;
+                this.sessionState = stateChangedEvent.state;
+                std.log.info("XrEventDataSessionStateChanged: state {}->{} session={?} time={}", .{
+                    oldState,
+                    this.sessionState,
+                    stateChangedEvent.session,
+                    stateChangedEvent.time,
+                });
+
+                // if ((stateChangedEvent.session != null) and (stateChangedEvent.session != session)) {
+                //     std.log.err("XrEventDataSessionStateChanged for unknown session", .{});
+                //     return .next;
+                // }
+
+                switch (this.sessionState) {
+                    c.XR_SESSION_STATE_READY => {
+                        return .session_begin;
+                    },
+                    c.XR_SESSION_STATE_STOPPING => {
+                        return .session_end;
+                    },
+                    c.XR_SESSION_STATE_EXITING => {
+                        return .quit;
+                    },
+                    c.XR_SESSION_STATE_LOSS_PENDING => {
+                        return .restart;
+                    },
+                    else => {},
+                }
+            },
+            c.XR_TYPE_EVENT_DATA_INTERACTION_PROFILE_CHANGED => {
+                // try action.LogEvent(this.allocator, this.session);
+            },
+            // case XR_TYPE_EVENT_DATA_REFERENCE_SPACE_CHANGE_PENDING:
+            else => {
+                std.log.debug("Ignoring event type {}", .{event.type});
+            },
+        }
+    }
+    return .next;
+}
+
+// Return event if one is available, otherwise return null.
+fn tryReadNextEvent(this: *@This()) ?*c.XrEventDataBaseHeader {
+    // It is sufficient to clear the just the XrEventDataBuffer header to
+    // XR_TYPE_EVENT_DATA_BUFFER
+    const baseHeader: *c.XrEventDataBaseHeader = @ptrCast(&this.eventDataBuffer);
+    baseHeader.* = .{ .type = c.XR_TYPE_EVENT_DATA_BUFFER };
+    const xr = c.xrPollEvent(this.instance, &this.eventDataBuffer);
+    if (xr == c.XR_SUCCESS) {
+        if (baseHeader.type == c.XR_TYPE_EVENT_DATA_EVENTS_LOST) {
+            const eventsLost: *c.XrEventDataEventsLost = @ptrCast(baseHeader);
+            std.log.warn("{} events lost", .{eventsLost.lostEventCount});
+        }
+        return baseHeader;
+    }
+    if (xr == c.XR_EVENT_UNAVAILABLE) {
+        return null;
+    }
+    @panic("xrPollEvent");
 }

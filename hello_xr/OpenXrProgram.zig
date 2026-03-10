@@ -21,9 +21,9 @@ const Swapchain = struct {
 
 allocator: std.mem.Allocator,
 options: *Options,
-instance: c.XrInstance = null,
-systemId: c.XrSystemId = c.XR_NULL_SYSTEM_ID,
-session: c.XrSession = null,
+instance: c.XrInstance,
+systemId: c.XrSystemId,
+session: c.XrSession,
 appSpace: c.XrSpace = null,
 layer: c.XrCompositionLayerProjection = .{ .type = c.XR_TYPE_COMPOSITION_LAYER_PROJECTION },
 
@@ -35,17 +35,13 @@ colorSwapchainFormat: i64 = -1,
 
 visualizedSpaces: std.ArrayList(c.XrSpace) = .{},
 
-// Application's current lifecycle state according to the runtime
-sessionState: c.XrSessionState = c.XR_SESSION_STATE_UNKNOWN,
-sessionRunning: bool = false,
-
-eventDataBuffer: c.XrEventDataBuffer = undefined,
 projectionLayerViews: std.ArrayList(c.XrCompositionLayerProjectionView) = .{},
 
 pub fn init(
     allocator: std.mem.Allocator,
     instance: c.XrInstance,
     systemId: c.XrSystemId,
+    session: c.XrSession,
     options: *Options,
 ) @This() {
     gfx.init(allocator);
@@ -54,6 +50,7 @@ pub fn init(
         .allocator = allocator,
         .instance = instance,
         .systemId = systemId,
+        .session = session,
         .options = options,
         .swapchainImages = .init(allocator),
     };
@@ -87,10 +84,7 @@ pub fn deinit(this: *@This()) void {
     //     //     if (m_appSpace != XR_NULL_HANDLE) {
     //     //         xrDestroySpace(m_appSpace);
     //     //     }
-    //
-    //     //     if (m_session != XR_NULL_HANDLE) {
-    //     //         xrDestroySession(m_session);
-    //     //     }
+
 }
 
 fn makeIndent(allocator: std.mem.Allocator, indent: usize) ![]const u8 {
@@ -130,23 +124,18 @@ fn logExtensions(allocator: std.mem.Allocator, _layerName: []const u8, indent: u
 var version_str: [64]u8 = undefined;
 
 pub fn run_frame(this: *@This()) !void {
-    if (this.IsSessionRunning()) {
-        try action.PollActions(this.session);
-        // try OpenXrProgram.oRenderFrame(allocator);
-        const frameState = try this.beginFrame();
-        var layer: ?*c.XrCompositionLayerBaseHeader = null;
-        if (frameState.shouldRender == c.XR_TRUE) {
-            if (try this.locate(frameState.predictedDisplayTime)) {
-                layer = try this.RenderLayer(
-                    frameState.predictedDisplayTime,
-                );
-            }
+    try action.PollActions(this.session);
+    // try OpenXrProgram.oRenderFrame(allocator);
+    const frameState = try this.beginFrame();
+    var layer: ?*c.XrCompositionLayerBaseHeader = null;
+    if (frameState.shouldRender == c.XR_TRUE) {
+        if (try this.locate(frameState.predictedDisplayTime)) {
+            layer = try this.RenderLayer(
+                frameState.predictedDisplayTime,
+            );
         }
-        try this.endFrame(frameState.predictedDisplayTime, layer);
-    } else {
-        // Throttle loop since xrWaitFrame won't be called.
-        std.Thread.sleep(std.time.ns_per_ms * 250);
     }
+    try this.endFrame(frameState.predictedDisplayTime, layer);
 }
 
 fn LogEnvironmentBlendMode(this: *@This(), _type: c.XrViewConfigurationType) XrError!void {
@@ -447,132 +436,6 @@ pub fn CreateSwapchains(this: *@This()) XrError!void {
             try this.swapchainImages.put(swapchain.handle, swapchainImages);
         }
     }
-}
-
-// Return event if one is available, otherwise return null.
-pub fn TryReadNextEvent(this: *@This()) ?*c.XrEventDataBaseHeader {
-    // It is sufficient to clear the just the XrEventDataBuffer header to
-    // XR_TYPE_EVENT_DATA_BUFFER
-    const baseHeader: *c.XrEventDataBaseHeader = @ptrCast(&this.eventDataBuffer);
-    baseHeader.* = .{ .type = c.XR_TYPE_EVENT_DATA_BUFFER };
-    const xr = c.xrPollEvent(this.instance, &this.eventDataBuffer);
-    if (xr == c.XR_SUCCESS) {
-        if (baseHeader.type == c.XR_TYPE_EVENT_DATA_EVENTS_LOST) {
-            const eventsLost: *c.XrEventDataEventsLost = @ptrCast(baseHeader);
-            std.log.warn("{} events lost", .{eventsLost.lostEventCount});
-        }
-        return baseHeader;
-    }
-    if (xr == c.XR_EVENT_UNAVAILABLE) {
-        return null;
-    }
-    @panic("xrPollEvent");
-}
-
-pub const SessionNext = enum {
-    next,
-    quit,
-    restart,
-};
-
-fn HandleSessionStateChangedEvent(
-    this: *@This(),
-    stateChangedEvent: *c.XrEventDataSessionStateChanged,
-    // exitRenderLoop: *bool,
-    // requestRestart: *bool,
-) XrError!SessionNext {
-    const oldState = this.sessionState;
-    this.sessionState = stateChangedEvent.state;
-
-    std.log.info("XrEventDataSessionStateChanged: state {}->{} session={?} time={}", .{
-        oldState,
-        this.sessionState,
-        stateChangedEvent.session,
-        stateChangedEvent.time,
-    });
-
-    if ((stateChangedEvent.session != null) and (stateChangedEvent.session != this.session)) {
-        std.log.err("XrEventDataSessionStateChanged for unknown session", .{});
-        return .next;
-    }
-
-    switch (this.sessionState) {
-        c.XR_SESSION_STATE_READY => {
-            std.debug.assert(this.session != null);
-            var sessionBeginInfo: c.XrSessionBeginInfo = .{
-                .type = c.XR_TYPE_SESSION_BEGIN_INFO,
-            };
-            sessionBeginInfo.primaryViewConfigurationType = this.options.parsed.ViewConfigType;
-            _ = try XrResult.init(c.xrBeginSession(this.session, &sessionBeginInfo));
-            this.sessionRunning = true;
-            return .next;
-        },
-        c.XR_SESSION_STATE_STOPPING => {
-            std.debug.assert(this.session != null);
-            this.sessionRunning = false;
-            _ = try XrResult.init(c.xrEndSession(this.session));
-            return .next;
-        },
-        c.XR_SESSION_STATE_EXITING => {
-            return .quit;
-        },
-        c.XR_SESSION_STATE_LOSS_PENDING => {
-            return .restart;
-        },
-        else => {
-            return .next;
-        },
-    }
-}
-
-pub const EventNext = enum {
-    render,
-    quit,
-    restart,
-};
-
-pub fn PollEvents(
-    this: *@This(),
-) !EventNext {
-    // Process all pending messages.
-    while (this.TryReadNextEvent()) |event| {
-        switch (event.type) {
-            c.XR_TYPE_EVENT_DATA_INSTANCE_LOSS_PENDING => {
-                // https://registry.khronos.org/OpenXR/specs/1.0/man/html/XrEventDataInstanceLossPending.html
-                const instanceLossPending: *c.XrEventDataInstanceLossPending = @ptrCast(event);
-                std.log.warn("XrEventDataInstanceLossPending by {}", .{instanceLossPending.lossTime});
-                return .restart;
-            },
-            c.XR_TYPE_EVENT_DATA_SESSION_STATE_CHANGED => {
-                const sessionStateChangedEvent: *c.XrEventDataSessionStateChanged = @ptrCast(event);
-                switch (try this.HandleSessionStateChangedEvent(sessionStateChangedEvent)) {
-                    .next => {},
-                    .quit => {
-                        return .quit;
-                    },
-                    .restart => {
-                        return .restart;
-                    },
-                }
-            },
-            c.XR_TYPE_EVENT_DATA_INTERACTION_PROFILE_CHANGED => {
-                try action.LogEvent(this.allocator, this.session);
-            },
-            // case XR_TYPE_EVENT_DATA_REFERENCE_SPACE_CHANGE_PENDING:
-            else => {
-                std.log.debug("Ignoring event type {}", .{event.type});
-            },
-        }
-    }
-    return .render;
-}
-
-pub fn IsSessionRunning(this: *@This()) bool {
-    return this.sessionRunning;
-}
-
-pub fn IsSessionFocused(this: *@This()) bool {
-    return this.m_sessionState == c.XR_SESSION_STATE_FOCUSED;
 }
 
 pub fn RenderLayer(

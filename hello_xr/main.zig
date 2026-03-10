@@ -43,30 +43,26 @@ pub fn main() !void {
         });
         defer instance.deinit();
 
+        try gfx.InitializeDevice(instance.instance, instance.systemId);
+
+        var session = try xrs.Session.init(
+            instance.instance,
+            instance.systemId,
+            gfx.GetGraphicsBinding(),
+        );
+        defer session.deinit();
+        var isSessionRunning = false;
+
         var prog = OpenXrProgram.init(
             allocator,
             instance.instance,
             instance.systemId,
+            session.session,
             &options,
         );
         defer prog.deinit();
 
         try prog.LogViewConfigurations();
-
-        // The graphics API can initialize the graphics device now that the systemId and instance
-        // handle are available.
-        try gfx.InitializeDevice(instance.instance, instance.systemId);
-
-        {
-            std.log.debug("Creating session...", .{});
-
-            var createInfo: c.XrSessionCreateInfo = .{
-                .type = c.XR_TYPE_SESSION_CREATE_INFO,
-                .next = gfx.GetGraphicsBinding(),
-                .systemId = instance.systemId,
-            };
-            _ = try XrResult.init(c.xrCreateSession(instance.instance, &createInfo, &prog.session));
-        }
 
         try prog.LogReferenceSpaces();
         try action.InitializeActions(prog.instance, prog.session);
@@ -79,25 +75,31 @@ pub fn main() !void {
 
         try prog.CreateSwapchains();
 
-        var restart = false;
         while (!quit_key.quitKeyPressed) {
-            const next = try prog.PollEvents();
-            switch (next) {
+            switch (try instance.pollEvents()) {
                 .quit => {
-                    restart = false;
                     break;
                 },
                 .restart => {
-                    restart = true;
-                    break;
+                    continue;
                 },
-                .render => {},
+                .next => {
+                    if (isSessionRunning) {
+                        try prog.run_frame();
+                    } else {
+                        // Throttle loop since xrWaitFrame won't be called.
+                        std.Thread.sleep(std.time.ns_per_ms * 250);
+                    }
+                },
+                .session_begin => {
+                    try session.begin(options.parsed.ViewConfigType);
+                    isSessionRunning = true;
+                },
+                .session_end => {
+                    try session.end();
+                    isSessionRunning = false;
+                },
             }
-
-            try prog.run_frame();
-        }
-        if (!restart) {
-            break;
         }
     }
 }
