@@ -35,84 +35,104 @@ pub fn main() !void {
     while (!quit_key.quitKeyPressed) {
         std.log.warn("New instance", .{});
 
-        var instance = try xrs.Instance.init(allocator, .{
-            .gfx_extensions = gfx.GetInstanceExtensions(),
-            .form_factor = options.FormFactor,
-        });
-        defer instance.deinit();
-        const blend_mode = try instance.getPreferredBlendMode(options.ViewConfigType);
-        try instance.logViewConfigurations(options.ViewConfigType, blend_mode);
-
-        gfx.init(allocator);
-        try gfx.InitializeDevice(instance.instance, instance.systemId);
-        defer gfx.deinit(allocator);
-
-        var session = try xrs.Session.init(
+        const next = try run_instance(
             allocator,
-            instance.instance,
-            instance.systemId,
-            gfx.GetGraphicsBinding(),
+            &quit_key.quitKeyPressed,
+            options.FormFactor,
+            options.ViewConfigType,
+            options.AppSpace,
         );
-        defer session.deinit();
-        var isSessionRunning = false;
-
-        var prog = OpenXrProgram.init(
-            allocator,
-            instance.instance,
-            instance.systemId,
-            session.session,
-        );
-        defer prog.deinit();
-
-        var action = try xrs.Action.init(allocator, prog.instance, prog.session);
-        defer action.deinit();
-
-        {
-            const referenceSpaceCreateInfo = options.AppSpace.makeXrReferenceSpaceCreateInfo();
-            _ = try XrResult.init(c.xrCreateReferenceSpace(prog.session, &referenceSpaceCreateInfo, &prog.appSpace));
-        }
-
-        try prog.CreateSwapchains(options.ViewConfigType);
-
-        std.log.warn("Loop start", .{});
-        while (!quit_key.quitKeyPressed) {
-            switch (try instance.pollEvents()) {
-                .quit => {
-                    break;
-                },
-                .restart => {
-                    continue;
-                },
-                .next => {
-                    if (isSessionRunning) {
-                        try action.pollActions();
-
-                        const frameState = try prog.beginFrame();
-                        var layer: ?*c.XrCompositionLayerBaseHeader = null;
-                        if (frameState.shouldRender == c.XR_TRUE) {
-                            if (try prog.locate(frameState.predictedDisplayTime, options.ViewConfigType)) {
-                                const cubes = try action.update(prog.appSpace, frameState.predictedDisplayTime);
-                                layer = try prog.renderLayer(
-                                    blend_mode,
-                                    cubes,
-                                );
-                            }
-                        }
-                        try prog.endFrame(frameState.predictedDisplayTime, blend_mode, layer);
-                    } else {
-                        // Throttle loop since xrWaitFrame won't be called.
-                        std.Thread.sleep(std.time.ns_per_ms * 250);
-                    }
-                },
-                .session_begin => {
-                    try session.begin(options.ViewConfigType);
-                    isSessionRunning = true;
-                },
-                .session_end => {
-                    try session.end();
-                    isSessionRunning = false;
-                },
-            }
+        switch (next) {
+            .quit => break,
+            .restart => continue,
         }
     }
+}
+
+fn run_instance(
+    allocator: std.mem.Allocator,
+    quit_key: *const bool,
+    form_factor: c.XrFormFactor,
+    view_config_type: c.XrViewConfigurationType,
+    app_space: Options.ReferenceSpaceType,
+) !enum {
+    quit,
+    restart,
+} {
+    var instance = try xrs.Instance.init(allocator, .{
+        .gfx_extensions = gfx.GetInstanceExtensions(),
+        .form_factor = form_factor,
+    });
+    defer instance.deinit();
+    const blend_mode = try instance.getPreferredBlendMode(view_config_type);
+    try instance.logViewConfigurations(view_config_type, blend_mode);
+
+    gfx.init(allocator);
+    try gfx.InitializeDevice(instance.instance, instance.systemId);
+    defer gfx.deinit(allocator);
+
+    var session = try xrs.Session.init(
+        allocator,
+        instance.instance,
+        instance.systemId,
+        gfx.GetGraphicsBinding(),
+    );
+    defer session.deinit();
+
+    var action = try xrs.Action.init(allocator, instance.instance, session.session);
+    defer action.deinit();
+
+    var prog = try OpenXrProgram.init(
+        allocator,
+        instance.instance,
+        instance.systemId,
+        session.session,
+        view_config_type,
+        app_space,
+    );
+    defer prog.deinit();
+
+    var isSessionRunning = false;
+    std.log.warn("Loop start", .{});
+    while (!quit_key.*) {
+        switch (try instance.pollEvents()) {
+            .quit => {
+                break;
+            },
+            .restart => {
+                return .restart;
+            },
+            .next => {
+                if (isSessionRunning) {
+                    try action.pollActions();
+
+                    const frameState = try prog.beginFrame();
+                    var layer: ?*c.XrCompositionLayerBaseHeader = null;
+                    if (frameState.shouldRender == c.XR_TRUE) {
+                        if (try prog.locate(frameState.predictedDisplayTime, view_config_type)) {
+                            const cubes = try action.update(prog.appSpace, frameState.predictedDisplayTime);
+                            layer = try prog.renderLayer(
+                                blend_mode,
+                                cubes,
+                            );
+                        }
+                    }
+                    try prog.endFrame(frameState.predictedDisplayTime, blend_mode, layer);
+                } else {
+                    // Throttle loop since xrWaitFrame won't be called.
+                    std.Thread.sleep(std.time.ns_per_ms * 250);
+                }
+            },
+            .session_begin => {
+                try session.begin(view_config_type);
+                isSessionRunning = true;
+            },
+            .session_end => {
+                try session.end();
+                isSessionRunning = false;
+            },
+        }
+    }
+
+    return .quit;
 }

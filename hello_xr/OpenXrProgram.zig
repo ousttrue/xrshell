@@ -38,15 +38,25 @@ pub fn init(
     instance: c.XrInstance,
     systemId: c.XrSystemId,
     session: c.XrSession,
-) @This() {
+    view_config_type: c.XrViewConfigurationType,
+    app_space: Options.ReferenceSpaceType,
+) !@This() {
     std.log.info("## OpenXrProgram.init ##", .{});
-    return .{
+
+    var this: @This() = .{
         .allocator = allocator,
         .instance = instance,
         .systemId = systemId,
         .session = session,
         .swapchainImages = .init(allocator),
     };
+
+    const referenceSpaceCreateInfo = app_space.makeXrReferenceSpaceCreateInfo();
+    _ = try XrResult.init(c.xrCreateReferenceSpace(session, &referenceSpaceCreateInfo, &this.appSpace));
+
+    try this.CreateSwapchains(view_config_type);
+
+    return this;
 }
 
 pub fn deinit(this: *@This()) void {

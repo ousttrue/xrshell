@@ -86,9 +86,9 @@ pub fn init(argv: [][*:0]u8) !@This() {
     while (i < argv.len) {
         const arg = getNextArg(argv, &i);
         if (std.ascii.eqlIgnoreCase(arg, "--formfactor") or std.ascii.eqlIgnoreCase(arg, "-ff")) {
-            this.FormFactor = try GetXrFormFactor(.init(getNextArg(argv, &i)));
+            this.FormFactor = try GetXrFormFactor(getNextArg(argv, &i));
         } else if (std.ascii.eqlIgnoreCase(arg, "--viewconfig") or std.ascii.eqlIgnoreCase(arg, "-vc")) {
-            this.ViewConfigType = try GetXrViewConfigurationType(.init(getNextArg(argv, &i)));
+            this.ViewConfigType = try GetXrViewConfigurationType(getNextArg(argv, &i));
         } else if (std.ascii.eqlIgnoreCase(arg, "--space") or std.ascii.eqlIgnoreCase(arg, "-s")) {
             const val = getNextArg(argv, &i);
             inline for (@typeInfo(ReferenceSpaceType).@"enum".fields) |f| {
@@ -130,36 +130,36 @@ pub fn GetBackgroundClearColor(environmentBlendMode: c.XrEnvironmentBlendMode) [
     };
 }
 
-fn GetXrFormFactor(formFactorStr: FixedString) !c.XrFormFactor {
-    if (std.ascii.eqlIgnoreCase(formFactorStr.span(), "Hmd")) {
+pub fn GetXrFormFactor(formFactorStr: []const u8) !c.XrFormFactor {
+    if (std.ascii.eqlIgnoreCase(formFactorStr, "Hmd")) {
         return c.XR_FORM_FACTOR_HEAD_MOUNTED_DISPLAY;
     }
-    if (std.ascii.eqlIgnoreCase(formFactorStr.span(), "Handheld")) {
+    if (std.ascii.eqlIgnoreCase(formFactorStr, "Handheld")) {
         return c.XR_FORM_FACTOR_HANDHELD_DISPLAY;
     }
-    std.log.err("Unknown form factor '{s}'", .{formFactorStr.span()});
+    std.log.err("Unknown form factor '{s}'", .{formFactorStr});
     return error.GetXrFormFactor;
 }
 
-fn GetXrViewConfigurationType(viewConfigurationStr: FixedString) !c.XrViewConfigurationType {
-    if (std.ascii.eqlIgnoreCase(viewConfigurationStr.span(), "Mono")) {
+pub fn GetXrViewConfigurationType(viewConfigurationStr: []const u8) !c.XrViewConfigurationType {
+    if (std.ascii.eqlIgnoreCase(viewConfigurationStr, "Mono")) {
         return c.XR_VIEW_CONFIGURATION_TYPE_PRIMARY_MONO;
     }
-    if (std.ascii.eqlIgnoreCase(viewConfigurationStr.span(), "Stereo")) {
+    if (std.ascii.eqlIgnoreCase(viewConfigurationStr, "Stereo")) {
         return c.XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;
     }
-    std.log.err("Unknown view configuration '{s}'", .{viewConfigurationStr.span()});
+    std.log.err("Unknown view configuration '{s}'", .{viewConfigurationStr});
     return error.GetXrViewConfigurationType;
 }
 
-fn GetXrEnvironmentBlendMode(environmentBlendModeStr: FixedString) !c.XrEnvironmentBlendMode {
-    if (std.ascii.eqlIgnoreCase(environmentBlendModeStr.span(), "Opaque")) {
+fn GetXrEnvironmentBlendMode(environmentBlendModeStr: []const u8) !c.XrEnvironmentBlendMode {
+    if (std.ascii.eqlIgnoreCase(environmentBlendModeStr, "Opaque")) {
         return c.XR_ENVIRONMENT_BLEND_MODE_OPAQUE;
     }
-    if (std.ascii.eqlIgnoreCase(environmentBlendModeStr.span(), "Additive")) {
+    if (std.ascii.eqlIgnoreCase(environmentBlendModeStr, "Additive")) {
         return c.XR_ENVIRONMENT_BLEND_MODE_ADDITIVE;
     }
-    if (std.ascii.eqlIgnoreCase(environmentBlendModeStr.span(), "AlphaBlend")) {
+    if (std.ascii.eqlIgnoreCase(environmentBlendModeStr, "AlphaBlend")) {
         return c.XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND;
     }
     std.log.err("Unknown environment blend mode '{s}'", .{environmentBlendModeStr.span()});
