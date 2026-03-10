@@ -3,6 +3,7 @@ const c = @import("c");
 const OpenXrProgram = @import("OpenXrProgram.zig");
 const action = @import("action.zig");
 const Options = @import("Options.zig");
+const QuitKeyObserver = @import("QuitKeyObserver.zig");
 
 pub const std_options: std.Options = .{
     .logFn = logFn,
@@ -32,18 +33,7 @@ pub fn logFn(
     std.debug.print("{s}{s}{s}0m\n", .{ begin, msg, CSI });
 }
 
-var quitKeyPressed = false;
-
-fn gets() void {
-    std.log.info("Press any key to shutdown...", .{});
-    var buf: [1]u8 = undefined;
-    var r = std.fs.File.stdin().reader(&buf);
-    var tmp: [1]u8 = undefined;
-    r.interface.readSliceAll(&tmp) catch {
-        //
-    };
-    quitKeyPressed = true;
-}
+var quit_key: QuitKeyObserver = .{};
 
 pub fn main() !void {
     // const allocator = std.heap.c_allocator;
@@ -58,11 +48,11 @@ pub fn main() !void {
     }
 
     // Spawn a thread to wait for a keypress
-    const thread = try std.Thread.spawn(.{}, gets, .{});
-    defer thread.join();
+    try quit_key.spawn();
+    defer quit_key.deinit();
 
     var requestRestart = true;
-    while (!quitKeyPressed and requestRestart) {
+    while (!quit_key.quitKeyPressed and requestRestart) {
         OpenXrProgram.init(allocator, &options);
         defer OpenXrProgram.deinit(allocator);
 
@@ -75,7 +65,7 @@ pub fn main() !void {
         const session = try OpenXrProgram.InitializeSession(allocator);
         try OpenXrProgram.CreateSwapchains(allocator);
 
-        while (!quitKeyPressed) {
+        while (!quit_key.quitKeyPressed) {
             var exitRenderLoop = false;
             try OpenXrProgram.PollEvents(allocator, &exitRenderLoop, &requestRestart);
             if (exitRenderLoop) {
