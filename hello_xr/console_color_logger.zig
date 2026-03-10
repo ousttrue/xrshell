@@ -8,7 +8,7 @@ pub fn logFn(
 ) void {
     const prefix = if (scope == .default) "" else "(" ++ @tagName(scope) ++ "): ";
 
-    var buf: [1024]u8 = undefined;
+    var buf: [8192]u8 = undefined;
     const msg = std.fmt.bufPrint(&buf, prefix ++ format, args) catch {
         return;
     };
