@@ -552,11 +552,17 @@ pub fn TryReadNextEvent() ?*c.XrEventDataBaseHeader {
     @panic("xrPollEvent");
 }
 
+pub const SessionNext = enum {
+    next,
+    quit,
+    restart,
+};
+
 fn HandleSessionStateChangedEvent(
     stateChangedEvent: *c.XrEventDataSessionStateChanged,
-    exitRenderLoop: *bool,
-    requestRestart: *bool,
-) XrError!void {
+    // exitRenderLoop: *bool,
+    // requestRestart: *bool,
+) XrError!SessionNext {
     const oldState = m_sessionState;
     m_sessionState = stateChangedEvent.state;
 
@@ -569,7 +575,7 @@ fn HandleSessionStateChangedEvent(
 
     if ((stateChangedEvent.session != null) and (stateChangedEvent.session != m_session)) {
         std.log.err("XrEventDataSessionStateChanged for unknown session", .{});
-        return;
+        return .next;
     }
 
     switch (m_sessionState) {
@@ -581,47 +587,55 @@ fn HandleSessionStateChangedEvent(
             sessionBeginInfo.primaryViewConfigurationType = m_options.parsed.ViewConfigType;
             _ = try XrResult.init(c.xrBeginSession(m_session, &sessionBeginInfo));
             m_sessionRunning = true;
+            return .next;
         },
         c.XR_SESSION_STATE_STOPPING => {
             std.debug.assert(m_session != null);
             m_sessionRunning = false;
             _ = try XrResult.init(c.xrEndSession(m_session));
+            return .next;
         },
         c.XR_SESSION_STATE_EXITING => {
-            exitRenderLoop.* = true;
-            // Do not attempt to restart because user closed this session.
-            requestRestart.* = false;
+            return .quit;
         },
         c.XR_SESSION_STATE_LOSS_PENDING => {
-            exitRenderLoop.* = true;
-            // Poll for a new instance.
-            requestRestart.* = true;
+            return .restart;
         },
-        else => {},
+        else => {
+            return .next;
+        },
     }
 }
 
+pub const EventNext = enum {
+    render,
+    quit,
+    restart,
+};
+
 pub fn PollEvents(
     allocator: std.mem.Allocator,
-    exitRenderLoop: *bool,
-    requestRestart: *bool,
-) !void {
-    exitRenderLoop.* = false;
-    requestRestart.* = false;
-
+) !EventNext {
     // Process all pending messages.
     while (TryReadNextEvent()) |event| {
         switch (event.type) {
             c.XR_TYPE_EVENT_DATA_INSTANCE_LOSS_PENDING => {
+                // https://registry.khronos.org/OpenXR/specs/1.0/man/html/XrEventDataInstanceLossPending.html
                 const instanceLossPending: *c.XrEventDataInstanceLossPending = @ptrCast(event);
                 std.log.warn("XrEventDataInstanceLossPending by {}", .{instanceLossPending.lossTime});
-                exitRenderLoop.* = true;
-                requestRestart.* = true;
-                return;
+                return .restart;
             },
             c.XR_TYPE_EVENT_DATA_SESSION_STATE_CHANGED => {
                 const sessionStateChangedEvent: *c.XrEventDataSessionStateChanged = @ptrCast(event);
-                try HandleSessionStateChangedEvent(sessionStateChangedEvent, exitRenderLoop, requestRestart);
+                switch (try HandleSessionStateChangedEvent(sessionStateChangedEvent)) {
+                    .next => {},
+                    .quit => {
+                        return .quit;
+                    },
+                    .restart => {
+                        return .restart;
+                    },
+                }
             },
             c.XR_TYPE_EVENT_DATA_INTERACTION_PROFILE_CHANGED => {
                 try action.LogEvent(allocator, m_session);
@@ -632,6 +646,7 @@ pub fn PollEvents(
             },
         }
     }
+    return .render;
 }
 
 pub fn IsSessionRunning() bool {

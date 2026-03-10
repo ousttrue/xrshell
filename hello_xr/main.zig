@@ -67,7 +67,18 @@ pub fn main() !void {
 
         while (!quit_key.quitKeyPressed) {
             var exitRenderLoop = false;
-            try OpenXrProgram.PollEvents(allocator, &exitRenderLoop, &requestRestart);
+            const next = try OpenXrProgram.PollEvents(allocator);
+            switch (next) {
+                .quit => {
+                    exitRenderLoop = true;
+                    requestRestart = false;
+                },
+                .restart => {
+                    exitRenderLoop = true;
+                    requestRestart = true;
+                },
+                .render => {},
+            }
             if (exitRenderLoop) {
                 break;
             }
