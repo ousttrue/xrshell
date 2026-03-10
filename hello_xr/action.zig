@@ -1,8 +1,8 @@
 const std = @import("std");
 const c = @import("c");
-const xr_util = @import("xr_util");
-const XrError = xr_util.XrError;
-const XrResult = xr_util.XrResult;
+const xrs = @import("xrshell/xrshell.zig");
+const XrError = xrs.XrError;
+const XrResult = xrs.XrResult;
 
 pub const Side = struct {
     pub const LEFT = 0;

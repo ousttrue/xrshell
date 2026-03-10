@@ -236,12 +236,12 @@ pub fn build(b: *std.Build) !void {
     targets.append(b.allocator, bin) catch @panic("OOM");
     b.installArtifact(bin);
 
-    const xr_util = b.addModule("xr_util", .{
-        .root_source_file = b.path("xr_util/xr_util.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    bin.root_module.addImport("xr_util", xr_util);
+    // const xr_util = b.addModule("xr_util", .{
+    //     .root_source_file = b.path("xr_util/xr_util.zig"),
+    //     .target = target,
+    //     .optimize = optimize,
+    // });
+    // bin.root_module.addImport("xr_util", xr_util);
 
     if (target.result.abi.isAndroid()) {
         for (LIBS_ANDROID) |lib| {

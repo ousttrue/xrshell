@@ -1,9 +1,8 @@
 const std = @import("std");
 const c = @import("c");
-const xr_util = @import("xr_util");
-const XrError = xr_util.XrError;
-const XrResult = xr_util.XrResult;
-// const CHECK_XRCMD = xr_util.CHECK_XRCMD;
+const xrs = @import("../xrshell/xrshell.zig");
+const XrError = xrs.XrError;
+const XrResult = xrs.XrResult;
 const geometry = @import("../geometry.zig");
 const Options = @import("../Options.zig");
 const gfxwrapper_opengl = @import("gfxwrapper_opengl_win32.zig");

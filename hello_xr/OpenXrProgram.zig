@@ -4,9 +4,9 @@ const gfx = if (builtin.os.tag == .windows)
     @import("gfx/graphicsplugin_opengl.zig")
 else
     @import("gfx/graphicsplugin_opengles.zig");
-const xr_util = @import("xr_util");
-const XrError = xr_util.XrError;
-const XrResult = xr_util.XrResult;
+const xrs = @import("xrshell/xrshell.zig");
+const XrError = xrs.XrError;
+const XrResult = xrs.XrResult;
 const Options = @import("Options.zig");
 const c = @import("c");
 const action = @import("action.zig");
