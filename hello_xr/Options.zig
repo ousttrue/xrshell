@@ -1,18 +1,83 @@
 const std = @import("std");
 const c = @import("c");
 const Options = @This();
-const Parsed = extern struct {
-    FormFactor: c.XrFormFactor = c.XR_FORM_FACTOR_HEAD_MOUNTED_DISPLAY,
-    ViewConfigType: c.XrViewConfigurationType = c.XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO,
-    // EnvironmentBlendMode: c.XrEnvironmentBlendMode = c.XR_ENVIRONMENT_BLEND_MODE_OPAQUE,
+
+pub const ReferenceSpaceType = enum {
+    View,
+    ViewFront,
+    Local,
+    Stage,
+    StageLeft,
+    StageRight,
+    StageLeftRotated,
+    StageRightRotated,
+
+    pub fn makeXrReferenceSpaceCreateInfo(this: @This()) c.XrReferenceSpaceCreateInfo {
+        var referenceSpaceCreateInfo: c.XrReferenceSpaceCreateInfo = .{
+            .type = c.XR_TYPE_REFERENCE_SPACE_CREATE_INFO,
+            .poseInReferenceSpace = Identity(),
+        };
+        switch (this) {
+            .View => {
+                referenceSpaceCreateInfo.referenceSpaceType = c.XR_REFERENCE_SPACE_TYPE_VIEW;
+            },
+            .ViewFront => {
+                // Render head-locked 2m in front of device.
+                referenceSpaceCreateInfo.poseInReferenceSpace = Translation(.{ .x = 0.0, .y = 0.0, .z = -2.0 });
+                referenceSpaceCreateInfo.referenceSpaceType = c.XR_REFERENCE_SPACE_TYPE_VIEW;
+            },
+            .Local => {
+                referenceSpaceCreateInfo.referenceSpaceType = c.XR_REFERENCE_SPACE_TYPE_LOCAL;
+            },
+            .Stage => {
+                referenceSpaceCreateInfo.referenceSpaceType = c.XR_REFERENCE_SPACE_TYPE_STAGE;
+            },
+            .StageLeft => {
+                referenceSpaceCreateInfo.poseInReferenceSpace = RotateCCWAboutYAxis(0.0, .{ .x = -2.0, .y = 0.0, .z = -2.0 });
+                referenceSpaceCreateInfo.referenceSpaceType = c.XR_REFERENCE_SPACE_TYPE_STAGE;
+            },
+            .StageRight => {
+                referenceSpaceCreateInfo.poseInReferenceSpace = RotateCCWAboutYAxis(0.0, .{ .x = 2.0, .y = 0.0, .z = -2.0 });
+                referenceSpaceCreateInfo.referenceSpaceType = c.XR_REFERENCE_SPACE_TYPE_STAGE;
+            },
+            .StageLeftRotated => {
+                referenceSpaceCreateInfo.poseInReferenceSpace = RotateCCWAboutYAxis(3.14 / 3.0, .{ .x = -2.0, .y = 0.5, .z = -2.0 });
+                referenceSpaceCreateInfo.referenceSpaceType = c.XR_REFERENCE_SPACE_TYPE_STAGE;
+            },
+            .StageRightRotated => {
+                referenceSpaceCreateInfo.poseInReferenceSpace = RotateCCWAboutYAxis(-3.14 / 3.0, .{ .x = 2.0, .y = 0.5, .z = -2.0 });
+                referenceSpaceCreateInfo.referenceSpaceType = c.XR_REFERENCE_SPACE_TYPE_STAGE;
+            },
+        }
+        return referenceSpaceCreateInfo;
+    }
+
+    pub fn Identity() c.XrPosef {
+        return .{
+            .orientation = .{ .w = 1 },
+        };
+    }
+
+    pub fn Translation(translation: c.XrVector3f) c.XrPosef {
+        var t = Identity();
+        t.position = translation;
+        return t;
+    }
+
+    pub fn RotateCCWAboutYAxis(radians: f32, translation: c.XrVector3f) c.XrPosef {
+        var t = Identity();
+        t.orientation.x = 0.0;
+        t.orientation.y = @sin(radians * 0.5);
+        t.orientation.z = 0.0;
+        t.orientation.w = @cos(radians * 0.5);
+        t.position = translation;
+        return t;
+    }
 };
 
-GraphicsPlugin: FixedString = .init(""),
-FormFactor: FixedString = .init("Hmd"),
-ViewConfiguration: FixedString = .init("Stereo"),
-// EnvironmentBlendMode: FixedString = .init("Opaque"),
-AppSpace: FixedString = .init("Local"),
-parsed: Parsed = .{},
+FormFactor: c.XrFormFactor = c.XR_FORM_FACTOR_HEAD_MOUNTED_DISPLAY,
+ViewConfigType: c.XrViewConfigurationType = c.XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO,
+AppSpace: ReferenceSpaceType = .Local,
 
 pub fn GetBackgroundClearColor(environmentBlendMode: c.XrEnvironmentBlendMode) [4]f32 {
     const SlateGrey = [4]f32{ 0.184313729, 0.309803933, 0.309803933, 1.0 };
@@ -24,12 +89,6 @@ pub fn GetBackgroundClearColor(environmentBlendMode: c.XrEnvironmentBlendMode) [
         c.XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND => TransparentBlack,
         else => SlateGrey,
     };
-}
-
-pub fn ParseStrings(this: *@This()) !void {
-    this.parsed.FormFactor = try GetXrFormFactor(this.FormFactor);
-    this.parsed.ViewConfigType = try GetXrViewConfigurationType(this.ViewConfiguration);
-    // this.parsed.EnvironmentBlendMode = try GetXrEnvironmentBlendMode(this.EnvironmentBlendMode);
 }
 
 fn GetXrFormFactor(formFactorStr: FixedString) !c.XrFormFactor {
@@ -100,19 +159,13 @@ fn GetXrEnvironmentBlendModeStr(environmentBlendMode: c.XrEnvironmentBlendMode) 
 
 fn ShowHelp() void {
     // TODO: Improve/update when things are more settled.
-    std.log.info("HelloXr --graphics|-g <Graphics API> [--formfactor|-ff <Form factor>] [--viewconfig|-vc <View config>] " ++
+    std.log.info("HelloXr [--formfactor|-ff <Form factor>] [--viewconfig|-vc <View config>] " ++
         "[--blendmode|-bm <Blend mode>] [--space|-s <Space>] [--verbose|-v]", .{});
-    std.log.info("Graphics APIs:            D3D11, D3D12, OpenGLES, OpenGL, Vulkan2, Vulkan, Metal", .{});
     std.log.info("Form factors:             Hmd, Handheld", .{});
     std.log.info("View configurations:      Mono, Stereo", .{});
     std.log.info("Environment blend modes:  Opaque, Additive, AlphaBlend", .{});
     std.log.info("Spaces:                   View, Local, Stage", .{});
 }
-
-// pub fn SetEnvironmentBlendMode(this: *@This(), environmentBlendMode: c.XrEnvironmentBlendMode) void {
-//     this.EnvironmentBlendMode = GetXrEnvironmentBlendModeStr(environmentBlendMode);
-//     this.parsed.EnvironmentBlendMode = environmentBlendMode;
-// }
 
 const Parser = struct {
     options: *Options,
@@ -128,21 +181,21 @@ const Parser = struct {
         return std.mem.span(this.argv[this.i]);
     }
 
-    fn parse(this: *@This()) void {
+    fn parse(this: *@This()) !void {
         while (this.i < this.argv.len) {
             const arg = this.getNextArg();
-            if (std.ascii.eqlIgnoreCase(arg, "--graphics") or std.ascii.eqlIgnoreCase(arg, "-g")) {
-                this.options.GraphicsPlugin = .init(this.getNextArg());
-            } else if (std.ascii.eqlIgnoreCase(arg, "--formfactor") or std.ascii.eqlIgnoreCase(arg, "-ff")) {
-                this.options.FormFactor = .init(this.getNextArg());
+            if (std.ascii.eqlIgnoreCase(arg, "--formfactor") or std.ascii.eqlIgnoreCase(arg, "-ff")) {
+                this.options.FormFactor = try GetXrFormFactor(.init(this.getNextArg()));
             } else if (std.ascii.eqlIgnoreCase(arg, "--viewconfig") or std.ascii.eqlIgnoreCase(arg, "-vc")) {
-                this.options.ViewConfiguration = .init(this.getNextArg());
-            } 
-            // else if (std.ascii.eqlIgnoreCase(arg, "--blendmode") or std.ascii.eqlIgnoreCase(arg, "-bm")) {
-            //     this.options.EnvironmentBlendMode = .init(this.getNextArg());
-            // } 
-            else if (std.ascii.eqlIgnoreCase(arg, "--space") or std.ascii.eqlIgnoreCase(arg, "-s")) {
-                this.options.AppSpace = .init(this.getNextArg());
+                this.options.ViewConfigType = try GetXrViewConfigurationType(.init(this.getNextArg()));
+            } else if (std.ascii.eqlIgnoreCase(arg, "--space") or std.ascii.eqlIgnoreCase(arg, "-s")) {
+                const val = this.getNextArg();
+                // this.options.AppSpace = .init();
+                inline for (@typeInfo(ReferenceSpaceType).@"enum".fields) |f| {
+                    if (std.ascii.eqlIgnoreCase(f.name, val)) {
+                        this.options.AppSpace = @enumFromInt(f.value);
+                    }
+                }
             } else if (std.ascii.eqlIgnoreCase(arg, "--verbose") or std.ascii.eqlIgnoreCase(arg, "-v")) {
                 // Log::SetLevel(Log::Level::Verbose);
             } else if (std.ascii.eqlIgnoreCase(arg, "--help") or std.ascii.eqlIgnoreCase(arg, "-h")) {
@@ -156,25 +209,10 @@ const Parser = struct {
     }
 };
 
-pub fn UpdateOptionsFromCommandLine(this: *@This(), argv: [][*:0]u8) bool {
+pub fn UpdateOptionsFromCommandLine(this: *@This(), argv: [][*:0]u8) !void {
     var parser: Parser = .{
         .options = this,
         .argv = argv,
     };
-    parser.parse();
-
-    // Check for required parameters.
-    if (this.GraphicsPlugin.c_str[0] == 0) {
-        std.log.err("GraphicsPlugin parameter is required", .{});
-        ShowHelp();
-        return false;
-    }
-
-    if (this.ParseStrings()) {} else |e| {
-        std.log.err("{s}", .{@errorName(e)});
-        ShowHelp();
-        return false;
-    }
-
-    return true;
+    try parser.parse();
 }

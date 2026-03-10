@@ -5,6 +5,7 @@ const XrError = xr_result.XrError;
 const XrResult = xr_result.XrResult;
 const Cube = @import("../Cube.zig");
 const geometry = @import("../geometry.zig");
+const Options = @import("../Options.zig");
 
 pub const Side = struct {
     pub const LEFT = 0;
@@ -44,18 +45,17 @@ pub fn init(
         .session = session,
     };
 
-    const visualizedSpaces = [_][]const u8{
-        "ViewFront", "Local", "Stage", "StageLeft", "StageRight", "StageLeftRotated", "StageRightRotated",
+    const visualizedSpaces = [_]Options.ReferenceSpaceType{
+        .ViewFront, .Local, .Stage, .StageLeft, .StageRight, .StageLeftRotated, .StageRightRotated,
     };
-
     for (visualizedSpaces) |visualizedSpace| {
-        const referenceSpaceCreateInfo = geometry.GetXrReferenceSpaceCreateInfo(visualizedSpace);
+        const referenceSpaceCreateInfo = visualizedSpace.makeXrReferenceSpaceCreateInfo();
         var space: c.XrSpace = undefined;
         const res = c.xrCreateReferenceSpace(this.session, &referenceSpaceCreateInfo, &space);
         if (c.XR_SUCCEEDED(res)) {
             try this.visualizedSpaces.append(this.allocator, space);
         } else {
-            std.log.warn("Failed to create reference space {s} with error {}", .{ visualizedSpace, res });
+            std.log.warn("Failed to create reference space {} with error {}", .{ visualizedSpace, res });
         }
     }
 

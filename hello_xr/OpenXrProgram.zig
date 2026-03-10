@@ -135,11 +135,11 @@ pub fn CreateSwapchains(this: *@This()) XrError!void {
     // Note: No other view configurations exist at the time this code was written. If this
     // condition is not met, the project will need to be audited to see how support should be
     // added.
-    std.debug.assert(this.options.parsed.ViewConfigType == c.XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO); //, "Unsupported view configuration type");
+    std.debug.assert(this.options.ViewConfigType == c.XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO); //, "Unsupported view configuration type");
 
     // Query and cache view configuration views.
     var viewCount: u32 = undefined;
-    _ = try XrResult.init(c.xrEnumerateViewConfigurationViews(this.instance, this.systemId, this.options.parsed.ViewConfigType, 0, &viewCount, null));
+    _ = try XrResult.init(c.xrEnumerateViewConfigurationViews(this.instance, this.systemId, this.options.ViewConfigType, 0, &viewCount, null));
     try this.configViews.resize(this.allocator, viewCount);
     for (this.configViews.items) |*item| {
         item.* = .{ .type = c.XR_TYPE_VIEW_CONFIGURATION_VIEW };
@@ -147,7 +147,7 @@ pub fn CreateSwapchains(this: *@This()) XrError!void {
     _ = try XrResult.init(c.xrEnumerateViewConfigurationViews(
         this.instance,
         this.systemId,
-        this.options.parsed.ViewConfigType,
+        this.options.ViewConfigType,
         viewCount,
         &viewCount,
         this.configViews.items.ptr,
@@ -339,7 +339,7 @@ pub fn locate(this: *@This(), predictedDisplayTime: c.XrTime) !bool {
     var viewCountOutput: u32 = undefined;
     var viewLocateInfo: c.XrViewLocateInfo = .{
         .type = c.XR_TYPE_VIEW_LOCATE_INFO,
-        .viewConfigurationType = this.options.parsed.ViewConfigType,
+        .viewConfigurationType = this.options.ViewConfigType,
         .displayTime = predictedDisplayTime,
         .space = this.appSpace,
     };

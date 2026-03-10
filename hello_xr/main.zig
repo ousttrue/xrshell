@@ -31,18 +31,16 @@ pub fn main() !void {
     defer std.debug.assert(gpa.deinit() == .ok);
 
     var options: Options = .{};
-    if (!options.UpdateOptionsFromCommandLine(std.os.argv)) {
-        return;
-    }
+    try options.UpdateOptionsFromCommandLine(std.os.argv);
 
     while (!quit_key.quitKeyPressed) {
         var instance = try xrs.Instance.init(allocator, .{
             .gfx_extensions = gfx.GetInstanceExtensions(),
-            .form_factor = options.parsed.FormFactor,
+            .form_factor = options.FormFactor,
         });
         defer instance.deinit();
-        const blend_mode = try instance.getPreferredBlendMode(options.parsed.ViewConfigType);
-        try instance.logViewConfigurations(options.parsed.ViewConfigType, blend_mode);
+        const blend_mode = try instance.getPreferredBlendMode(options.ViewConfigType);
+        try instance.logViewConfigurations(options.ViewConfigType, blend_mode);
 
         gfx.init(allocator);
         try gfx.InitializeDevice(instance.instance, instance.systemId);
@@ -70,7 +68,7 @@ pub fn main() !void {
         defer action.deinit();
 
         {
-            const referenceSpaceCreateInfo = geometry.GetXrReferenceSpaceCreateInfo(prog.options.AppSpace.span());
+            const referenceSpaceCreateInfo = prog.options.AppSpace.makeXrReferenceSpaceCreateInfo();
             _ = try XrResult.init(c.xrCreateReferenceSpace(prog.session, &referenceSpaceCreateInfo, &prog.appSpace));
         }
 
@@ -108,7 +106,7 @@ pub fn main() !void {
                     }
                 },
                 .session_begin => {
-                    try session.begin(options.parsed.ViewConfigType);
+                    try session.begin(options.ViewConfigType);
                     isSessionRunning = true;
                 },
                 .session_end => {
