@@ -20,7 +20,6 @@ const Swapchain = struct {
 };
 
 allocator: std.mem.Allocator,
-quit_key: *const bool,
 options: *Options,
 instance: c.XrInstance = null,
 systemId: c.XrSystemId = c.XR_NULL_SYSTEM_ID,
@@ -43,12 +42,18 @@ sessionRunning: bool = false,
 eventDataBuffer: c.XrEventDataBuffer = undefined,
 projectionLayerViews: std.ArrayList(c.XrCompositionLayerProjectionView) = .{},
 
-pub fn init(allocator: std.mem.Allocator, options: *Options, quit_key: *const bool) @This() {
+pub fn init(
+    allocator: std.mem.Allocator,
+    instance: c.XrInstance,
+    systemId: c.XrSystemId,
+    options: *Options,
+) @This() {
     gfx.init(allocator);
     action.init();
     return .{
         .allocator = allocator,
-        .quit_key = quit_key,
+        .instance = instance,
+        .systemId = systemId,
         .options = options,
         .swapchainImages = .init(allocator),
     };
@@ -86,10 +91,6 @@ pub fn deinit(this: *@This()) void {
     //     //     if (m_session != XR_NULL_HANDLE) {
     //     //         xrDestroySession(m_session);
     //     //     }
-    //
-    //     //     if (m_instance != XR_NULL_HANDLE) {
-    //     //         xrDestroyInstance(m_instance);
-    //     //     }
 }
 
 fn makeIndent(allocator: std.mem.Allocator, indent: usize) ![]const u8 {
@@ -126,137 +127,9 @@ fn logExtensions(allocator: std.mem.Allocator, _layerName: []const u8, indent: u
     }
 }
 
-fn getXrVersionString(buf: []u8, ver: c.XrVersion) []const u8 {
-    return std.fmt.bufPrint(buf, "{}.{}.{}", .{
-        c.XR_VERSION_MAJOR(ver),
-        c.XR_VERSION_MINOR(ver),
-        c.XR_VERSION_PATCH(ver),
-    }) catch @panic("OOM");
-}
+var version_str: [64]u8 = undefined;
 
-pub fn run(this: *@This(), instance_create_info: ?*anyopaque) !bool {
-    // Log non-layer extensions (layerName==nullptr).
-    _ = try logExtensions(this.allocator, &.{}, 0);
-
-    // Log layers and any of their extensions.
-    var version_str: [64]u8 = undefined;
-    {
-        var layerCount: u32 = undefined;
-        _ = try XrResult.init(c.xrEnumerateApiLayerProperties(0, &layerCount, null));
-        const layers = try this.allocator.alloc(c.XrApiLayerProperties, layerCount);
-        defer this.allocator.free(layers);
-        for (layers) |*l| {
-            l.* = .{ .type = c.XR_TYPE_API_LAYER_PROPERTIES };
-        }
-        _ = try XrResult.init(c.xrEnumerateApiLayerProperties(@intCast(layers.len), &layerCount, layers.ptr));
-        std.log.info("Available Layers: ({})", .{layerCount});
-        for (layers) |layer| {
-            std.log.debug("  Name={s} SpecVersion={s} LayerVersion={} Description={s}", .{
-                layer.layerName,
-                getXrVersionString(&version_str, layer.specVersion),
-                layer.layerVersion,
-                layer.description,
-            });
-            try logExtensions(this.allocator, std.mem.sliceTo(&layer.layerName, 0), 4);
-        }
-    }
-
-    // Create union of extensions required by platform and graphics plugins.
-    const gfx_extensions = gfx.GetInstanceExtensions();
-    var extensions: std.ArrayList([*:0]const u8) = .{};
-    defer extensions.deinit(this.allocator);
-    for (gfx_extensions, 0..) |e, i| {
-        const p: [*:0]const u8 = @ptrCast(e);
-        std.log.info("GFX[{}]extension: {s}", .{ i, std.mem.span(p) });
-        try extensions.append(this.allocator, e);
-    }
-
-    {
-        var createInfo: c.XrInstanceCreateInfo = .{
-            .type = c.XR_TYPE_INSTANCE_CREATE_INFO,
-            .next = instance_create_info,
-            .enabledExtensionCount = @intCast(extensions.items.len),
-            .enabledExtensionNames = extensions.items.ptr,
-            .applicationInfo = .{},
-        };
-        _ = std.fmt.bufPrintZ(&createInfo.applicationInfo.applicationName, "{s}", .{"HelloXR"}) catch @panic("OOM");
-        // Current version is 1.1.x, but hello_xr only requires 1.0.x
-        createInfo.applicationInfo.apiVersion = c.XR_API_VERSION_1_0;
-        _ = try XrResult.init(c.xrCreateInstance(&createInfo, &this.instance));
-    }
-
-    var instanceProperties: c.XrInstanceProperties = .{ .type = c.XR_TYPE_INSTANCE_PROPERTIES };
-    _ = try XrResult.init(c.xrGetInstanceProperties(this.instance, &instanceProperties));
-    std.log.info("Instance RuntimeName={s} RuntimeVersion={s}", .{
-        instanceProperties.runtimeName,
-        getXrVersionString(&version_str, instanceProperties.runtimeVersion),
-    });
-
-    const systemInfo: c.XrSystemGetInfo = .{
-        .type = c.XR_TYPE_SYSTEM_GET_INFO,
-        .formFactor = this.options.parsed.FormFactor,
-    };
-    _ = try XrResult.init(c.xrGetSystem(this.instance, &systemInfo, &this.systemId));
-    std.log.debug("Using system {} for form factor {}", .{
-        this.systemId,
-        this.options.parsed.FormFactor,
-    });
-
-    try this.LogViewConfigurations();
-
-    // The graphics API can initialize the graphics device now that the systemId and instance
-    // handle are available.
-    try gfx.InitializeDevice(this.instance, this.systemId);
-
-    {
-        std.log.debug("Creating session...", .{});
-
-        var createInfo: c.XrSessionCreateInfo = .{
-            .type = c.XR_TYPE_SESSION_CREATE_INFO,
-            .next = gfx.GetGraphicsBinding(),
-            .systemId = this.systemId,
-        };
-        _ = try XrResult.init(c.xrCreateSession(this.instance, &createInfo, &this.session));
-    }
-
-    try this.LogReferenceSpaces();
-    try action.InitializeActions(this.instance, this.session);
-    try this.CreateVisualizedSpaces();
-
-    {
-        const referenceSpaceCreateInfo = geometry.GetXrReferenceSpaceCreateInfo(this.options.AppSpace.span());
-        _ = try XrResult.init(c.xrCreateReferenceSpace(this.session, &referenceSpaceCreateInfo, &this.appSpace));
-    }
-
-    try this.CreateSwapchains();
-
-    while (!this.quit_key.*) {
-        switch (try this.run_frame()) {
-            .next => {},
-            .quit => {
-                return false;
-            },
-            .restart => {
-                return true;
-            },
-        }
-    }
-
-    return false;
-}
-
-fn run_frame(this: *@This()) !NextFrame {
-    const next = try this.PollEvents();
-    switch (next) {
-        .quit => {
-            return .quit;
-        },
-        .restart => {
-            return .restart;
-        },
-        .render => {},
-    }
-
+pub fn run_frame(this: *@This()) !void {
     if (this.IsSessionRunning()) {
         try action.PollActions(this.session);
         // try OpenXrProgram.oRenderFrame(allocator);
@@ -274,7 +147,6 @@ fn run_frame(this: *@This()) !NextFrame {
         // Throttle loop since xrWaitFrame won't be called.
         std.Thread.sleep(std.time.ns_per_ms * 250);
     }
-    return .next;
 }
 
 fn LogEnvironmentBlendMode(this: *@This(), _type: c.XrViewConfigurationType) XrError!void {
@@ -333,7 +205,7 @@ pub fn GetPreferredBlendMode(this: *@This()) !c.XrEnvironmentBlendMode {
     return error.NoAcceptableBlendMode;
 }
 
-fn LogViewConfigurations(this: *@This()) XrError!void {
+pub fn LogViewConfigurations(this: *@This()) XrError!void {
     var viewConfigTypeCount: u32 = undefined;
     _ = try XrResult.init(c.xrEnumerateViewConfigurations(
         this.instance,
@@ -416,7 +288,7 @@ fn LogViewConfigurations(this: *@This()) XrError!void {
     }
 }
 
-fn LogReferenceSpaces(this: *@This()) XrError!void {
+pub fn LogReferenceSpaces(this: *@This()) XrError!void {
     std.debug.assert(this.session != null);
 
     var spaceCount: u32 = undefined;
@@ -431,7 +303,7 @@ fn LogReferenceSpaces(this: *@This()) XrError!void {
     }
 }
 
-fn CreateVisualizedSpaces(this: *@This()) !void {
+pub fn CreateVisualizedSpaces(this: *@This()) !void {
     const visualizedSpaces = [_][]const u8{
         "ViewFront", "Local", "Stage", "StageLeft", "StageRight", "StageLeftRotated", "StageRightRotated",
     };

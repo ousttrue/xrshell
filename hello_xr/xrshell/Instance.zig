@@ -1,0 +1,94 @@
+const std = @import("std");
+const c = @import("c");
+const xr_result = @import("xr_result.zig");
+const XrResult = xr_result.XrResult;
+const XrError = xr_result.XrError;
+const xr_util = @import("xr_util.zig");
+
+instance: c.XrInstance = null,
+systemId: c.XrSystemId = c.XR_NULL_SYSTEM_ID,
+
+var version_str: [64]u8 = undefined;
+
+pub const Options = struct {
+    instance_create_info: ?*anyopaque = null,
+    gfx_extensions: []const [*:0]const u8,
+    form_factor: c.XrFormFactor,
+};
+
+pub fn init(allocator: std.mem.Allocator, opts: Options) XrError!@This() {
+    std.log.info("xrshell.Instance.init()", .{});
+    // Log non-layer extensions (layerName==nullptr).
+    // _ = try logExtensions(this.allocator, &.{}, 0);
+
+    // Log layers and any of their extensions.
+    // {
+    //     var layerCount: u32 = undefined;
+    //     _ = try XrResult.init(c.xrEnumerateApiLayerProperties(0, &layerCount, null));
+    //     const layers = try this.allocator.alloc(c.XrApiLayerProperties, layerCount);
+    //     defer this.allocator.free(layers);
+    //     for (layers) |*l| {
+    //         l.* = .{ .type = c.XR_TYPE_API_LAYER_PROPERTIES };
+    //     }
+    //     _ = try XrResult.init(c.xrEnumerateApiLayerProperties(@intCast(layers.len), &layerCount, layers.ptr));
+    //     std.log.info("Available Layers: ({})", .{layerCount});
+    //     for (layers) |layer| {
+    //         std.log.debug("  Name={s} SpecVersion={s} LayerVersion={} Description={s}", .{
+    //             layer.layerName,
+    //             getXrVersionString(&version_str, layer.specVersion),
+    //             layer.layerVersion,
+    //             layer.description,
+    //         });
+    //         try logExtensions(this.allocator, std.mem.sliceTo(&layer.layerName, 0), 4);
+    //     }
+    // }
+
+    var this = @This(){};
+
+    // Create union of extensions required by platform and graphics plugins.
+    // const gfx_extensions = gfx.GetInstanceExtensions();
+    var extensions: std.ArrayList([*:0]const u8) = .{};
+    defer extensions.deinit(allocator);
+    for (opts.gfx_extensions, 0..) |e, i| {
+        const p: [*:0]const u8 = @ptrCast(e);
+        std.log.info("GFX[{}]extension: {s}", .{ i, std.mem.span(p) });
+        try extensions.append(allocator, e);
+    }
+    var createInfo: c.XrInstanceCreateInfo = .{
+        .type = c.XR_TYPE_INSTANCE_CREATE_INFO,
+        .next = opts.instance_create_info,
+        .enabledExtensionCount = @intCast(extensions.items.len),
+        .enabledExtensionNames = extensions.items.ptr,
+        .applicationInfo = .{},
+    };
+    _ = std.fmt.bufPrintZ(&createInfo.applicationInfo.applicationName, "{s}", .{"HelloXR"}) catch @panic("OOM");
+    // Current version is 1.1.x, but hello_xr only requires 1.0.x
+    createInfo.applicationInfo.apiVersion = c.XR_API_VERSION_1_0;
+    _ = try XrResult.init(c.xrCreateInstance(&createInfo, &this.instance));
+
+    var instanceProperties: c.XrInstanceProperties = .{ .type = c.XR_TYPE_INSTANCE_PROPERTIES };
+    _ = try XrResult.init(c.xrGetInstanceProperties(this.instance, &instanceProperties));
+    std.log.info("Instance RuntimeName={s} RuntimeVersion={s}", .{
+        instanceProperties.runtimeName,
+        xr_util.getXrVersionString(&version_str, instanceProperties.runtimeVersion),
+    });
+
+    const systemInfo: c.XrSystemGetInfo = .{
+        .type = c.XR_TYPE_SYSTEM_GET_INFO,
+        .formFactor = opts.form_factor,
+    };
+    _ = try XrResult.init(c.xrGetSystem(this.instance, &systemInfo, &this.systemId));
+    std.log.debug("Using system {} for form factor {}", .{
+        this.systemId,
+        systemInfo.formFactor,
+    });
+
+    return this;
+}
+
+pub fn deinit(this: *@This()) void {
+    std.log.info("xrshell.Instance.deinit()", .{});
+    if (this.instance) |handle| {
+        _ = c.xrDestroyInstance(handle);
+    }
+}

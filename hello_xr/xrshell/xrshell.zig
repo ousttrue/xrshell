@@ -1,6 +1,7 @@
 const xr_result = @import("xr_result.zig");
 pub const XrResult = xr_result.XrResult;
 pub const XrError = xr_result.XrError;
+pub const Instance = @import("Instance.zig");
 
 // pub fn ThrowXrResult(sourceLocation: std.builtin.SourceLocation, res: c.XrResult, originator: []const u8) void {
 //     std.log.err("XrResult failure [{s}] {s} {}", .{ to_string(res), originator, sourceLocation });
