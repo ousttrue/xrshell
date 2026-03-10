@@ -1,8 +1,10 @@
 const std = @import("std");
 const c = @import("c");
-const xrs = @import("xrshell/xrshell.zig");
-const XrError = xrs.XrError;
-const XrResult = xrs.XrResult;
+const xr_result = @import("xr_result.zig");
+const XrError = xr_result.XrError;
+const XrResult = xr_result.XrResult;
+const Cube = @import("../Cube.zig");
+const geometry = @import("../geometry.zig");
 
 pub const Side = struct {
     pub const LEFT = 0;
@@ -23,20 +25,40 @@ pub const InputState = struct {
     handActive: [Side.COUNT]c.XrBool32 = undefined,
 };
 
-pub var m_input: InputState = .{};
+allocator: std.mem.Allocator,
+instance: c.XrInstance,
+session: c.XrSession,
+visualizedSpaces: std.ArrayList(c.XrSpace) = .{},
+input: InputState = .{},
+cubes: std.ArrayList(Cube) = .{},
 
-pub fn init() void {}
+pub fn init(
+    allocator: std.mem.Allocator,
+    instance: c.XrInstance,
+    session: c.XrSession,
+) !@This() {
+    std.log.info("## Action.init ##", .{});
+    var this = @This(){
+        .allocator = allocator,
+        .instance = instance,
+        .session = session,
+    };
 
-pub fn deinit() void {
-    if (m_input.actionSet != null) {
-        for (hands) |hand| {
-            _ = c.xrDestroySpace(m_input.handSpace[hand]);
+    const visualizedSpaces = [_][]const u8{
+        "ViewFront", "Local", "Stage", "StageLeft", "StageRight", "StageLeftRotated", "StageRightRotated",
+    };
+
+    for (visualizedSpaces) |visualizedSpace| {
+        const referenceSpaceCreateInfo = geometry.GetXrReferenceSpaceCreateInfo(visualizedSpace);
+        var space: c.XrSpace = undefined;
+        const res = c.xrCreateReferenceSpace(this.session, &referenceSpaceCreateInfo, &space);
+        if (c.XR_SUCCEEDED(res)) {
+            try this.visualizedSpaces.append(this.allocator, space);
+        } else {
+            std.log.warn("Failed to create reference space {s} with error {}", .{ visualizedSpace, res });
         }
-        _ = c.xrDestroyActionSet(m_input.actionSet);
     }
-}
 
-pub fn InitializeActions(instance: c.XrInstance, session: c.XrSession) XrError!void {
     // Create an action set.
     {
         var actionSetInfo: c.XrActionSetCreateInfo = .{
@@ -45,12 +67,12 @@ pub fn InitializeActions(instance: c.XrInstance, session: c.XrSession) XrError!v
         };
         _ = std.fmt.bufPrintZ(&actionSetInfo.actionSetName, "gameplay", .{}) catch @panic("OOM");
         _ = std.fmt.bufPrintZ(&actionSetInfo.localizedActionSetName, "Gameplay", .{}) catch @panic("OOM");
-        _ = try XrResult.init(c.xrCreateActionSet(instance, &actionSetInfo, &m_input.actionSet));
+        _ = try XrResult.init(c.xrCreateActionSet(instance, &actionSetInfo, &this.input.actionSet));
     }
 
     // Get the XrPath for the left and right hands - we will use them as subaction paths.
-    _ = try XrResult.init(c.xrStringToPath(instance, "/user/hand/left", &m_input.handSubactionPath[Side.LEFT]));
-    _ = try XrResult.init(c.xrStringToPath(instance, "/user/hand/right", &m_input.handSubactionPath[Side.RIGHT]));
+    _ = try XrResult.init(c.xrStringToPath(instance, "/user/hand/left", &this.input.handSubactionPath[Side.LEFT]));
+    _ = try XrResult.init(c.xrStringToPath(instance, "/user/hand/right", &this.input.handSubactionPath[Side.RIGHT]));
 
     // Create actions.
     {
@@ -58,28 +80,28 @@ pub fn InitializeActions(instance: c.XrInstance, session: c.XrSession) XrError!v
         var actionInfo: c.XrActionCreateInfo = .{
             .type = c.XR_TYPE_ACTION_CREATE_INFO,
             .actionType = c.XR_ACTION_TYPE_FLOAT_INPUT,
-            .countSubactionPaths = m_input.handSubactionPath.len,
-            .subactionPaths = &m_input.handSubactionPath,
+            .countSubactionPaths = this.input.handSubactionPath.len,
+            .subactionPaths = &this.input.handSubactionPath,
         };
         _ = std.fmt.bufPrintZ(&actionInfo.actionName, "grab_object", .{}) catch @panic("OOM");
         _ = std.fmt.bufPrintZ(&actionInfo.localizedActionName, "Grab Object", .{}) catch @panic("OOM");
-        _ = try XrResult.init(c.xrCreateAction(m_input.actionSet, &actionInfo, &m_input.grabAction));
+        _ = try XrResult.init(c.xrCreateAction(this.input.actionSet, &actionInfo, &this.input.grabAction));
 
         // Create an input action getting the left and right hand poses.
         actionInfo.actionType = c.XR_ACTION_TYPE_POSE_INPUT;
         _ = std.fmt.bufPrintZ(&actionInfo.actionName, "hand_pose", .{}) catch @panic("OOM");
         _ = std.fmt.bufPrintZ(&actionInfo.localizedActionName, "Hand Pose", .{}) catch @panic("OOM");
-        actionInfo.countSubactionPaths = m_input.handSubactionPath.len;
-        actionInfo.subactionPaths = &m_input.handSubactionPath;
-        _ = try XrResult.init(c.xrCreateAction(m_input.actionSet, &actionInfo, &m_input.poseAction));
+        actionInfo.countSubactionPaths = this.input.handSubactionPath.len;
+        actionInfo.subactionPaths = &this.input.handSubactionPath;
+        _ = try XrResult.init(c.xrCreateAction(this.input.actionSet, &actionInfo, &this.input.poseAction));
 
         // Create output actions for vibrating the left and right controller.
         actionInfo.actionType = c.XR_ACTION_TYPE_VIBRATION_OUTPUT;
         _ = std.fmt.bufPrintZ(&actionInfo.actionName, "vibrate_hand", .{}) catch @panic("OOM");
         _ = std.fmt.bufPrintZ(&actionInfo.localizedActionName, "Vibrate Hand", .{}) catch @panic("OOM");
-        actionInfo.countSubactionPaths = m_input.handSubactionPath.len;
-        actionInfo.subactionPaths = &m_input.handSubactionPath;
-        _ = try XrResult.init(c.xrCreateAction(m_input.actionSet, &actionInfo, &m_input.vibrateAction));
+        actionInfo.countSubactionPaths = this.input.handSubactionPath.len;
+        actionInfo.subactionPaths = &this.input.handSubactionPath;
+        _ = try XrResult.init(c.xrCreateAction(this.input.actionSet, &actionInfo, &this.input.vibrateAction));
 
         // Create input actions for quitting the session using the left and right controller.
         // Since it doesn't matter which hand did this, we do not specify subaction paths for it.
@@ -89,7 +111,7 @@ pub fn InitializeActions(instance: c.XrInstance, session: c.XrSession) XrError!v
         _ = std.fmt.bufPrintZ(&actionInfo.localizedActionName, "Quit Session", .{}) catch @panic("OOM");
         actionInfo.countSubactionPaths = 0;
         actionInfo.subactionPaths = null;
-        _ = try XrResult.init(c.xrCreateAction(m_input.actionSet, &actionInfo, &m_input.quitAction));
+        _ = try XrResult.init(c.xrCreateAction(this.input.actionSet, &actionInfo, &this.input.quitAction));
     }
 
     var selectPath: [Side.COUNT]c.XrPath = undefined;
@@ -126,14 +148,14 @@ pub fn InitializeActions(instance: c.XrInstance, session: c.XrSession) XrError!v
         _ = try XrResult.init(c.xrStringToPath(instance, "/interaction_profiles/khr/simple_controller", &khrSimpleInteractionProfilePath));
         // Fall back to a click input for the grab action.
         const bindings = [_]c.XrActionSuggestedBinding{
-            .{ .action = m_input.grabAction, .binding = selectPath[Side.LEFT] },
-            .{ .action = m_input.grabAction, .binding = selectPath[Side.RIGHT] },
-            .{ .action = m_input.poseAction, .binding = posePath[Side.LEFT] },
-            .{ .action = m_input.poseAction, .binding = posePath[Side.RIGHT] },
-            .{ .action = m_input.quitAction, .binding = menuClickPath[Side.LEFT] },
-            .{ .action = m_input.quitAction, .binding = menuClickPath[Side.RIGHT] },
-            .{ .action = m_input.vibrateAction, .binding = hapticPath[Side.LEFT] },
-            .{ .action = m_input.vibrateAction, .binding = hapticPath[Side.RIGHT] },
+            .{ .action = this.input.grabAction, .binding = selectPath[Side.LEFT] },
+            .{ .action = this.input.grabAction, .binding = selectPath[Side.RIGHT] },
+            .{ .action = this.input.poseAction, .binding = posePath[Side.LEFT] },
+            .{ .action = this.input.poseAction, .binding = posePath[Side.RIGHT] },
+            .{ .action = this.input.quitAction, .binding = menuClickPath[Side.LEFT] },
+            .{ .action = this.input.quitAction, .binding = menuClickPath[Side.RIGHT] },
+            .{ .action = this.input.vibrateAction, .binding = hapticPath[Side.LEFT] },
+            .{ .action = this.input.vibrateAction, .binding = hapticPath[Side.RIGHT] },
         };
         var suggestedBindings: c.XrInteractionProfileSuggestedBinding = .{
             .type = c.XR_TYPE_INTERACTION_PROFILE_SUGGESTED_BINDING,
@@ -148,13 +170,13 @@ pub fn InitializeActions(instance: c.XrInstance, session: c.XrSession) XrError!v
         var oculusTouchInteractionProfilePath: c.XrPath = undefined;
         _ = try XrResult.init(c.xrStringToPath(instance, "/interaction_profiles/oculus/touch_controller", &oculusTouchInteractionProfilePath));
         const bindings = [_]c.XrActionSuggestedBinding{
-            .{ .action = m_input.grabAction, .binding = squeezeValuePath[Side.LEFT] },
-            .{ .action = m_input.grabAction, .binding = squeezeValuePath[Side.RIGHT] },
-            .{ .action = m_input.poseAction, .binding = posePath[Side.LEFT] },
-            .{ .action = m_input.poseAction, .binding = posePath[Side.RIGHT] },
-            .{ .action = m_input.quitAction, .binding = menuClickPath[Side.LEFT] },
-            .{ .action = m_input.vibrateAction, .binding = hapticPath[Side.LEFT] },
-            .{ .action = m_input.vibrateAction, .binding = hapticPath[Side.RIGHT] },
+            .{ .action = this.input.grabAction, .binding = squeezeValuePath[Side.LEFT] },
+            .{ .action = this.input.grabAction, .binding = squeezeValuePath[Side.RIGHT] },
+            .{ .action = this.input.poseAction, .binding = posePath[Side.LEFT] },
+            .{ .action = this.input.poseAction, .binding = posePath[Side.RIGHT] },
+            .{ .action = this.input.quitAction, .binding = menuClickPath[Side.LEFT] },
+            .{ .action = this.input.vibrateAction, .binding = hapticPath[Side.LEFT] },
+            .{ .action = this.input.vibrateAction, .binding = hapticPath[Side.RIGHT] },
         };
         var suggestedBindings: c.XrInteractionProfileSuggestedBinding = .{
             .type = c.XR_TYPE_INTERACTION_PROFILE_SUGGESTED_BINDING,
@@ -169,14 +191,14 @@ pub fn InitializeActions(instance: c.XrInstance, session: c.XrSession) XrError!v
         var viveControllerInteractionProfilePath: c.XrPath = undefined;
         _ = try XrResult.init(c.xrStringToPath(instance, "/interaction_profiles/htc/vive_controller", &viveControllerInteractionProfilePath));
         const bindings = [_]c.XrActionSuggestedBinding{
-            .{ .action = m_input.grabAction, .binding = triggerValuePath[Side.LEFT] },
-            .{ .action = m_input.grabAction, .binding = triggerValuePath[Side.RIGHT] },
-            .{ .action = m_input.poseAction, .binding = posePath[Side.LEFT] },
-            .{ .action = m_input.poseAction, .binding = posePath[Side.RIGHT] },
-            .{ .action = m_input.quitAction, .binding = menuClickPath[Side.LEFT] },
-            .{ .action = m_input.quitAction, .binding = menuClickPath[Side.RIGHT] },
-            .{ .action = m_input.vibrateAction, .binding = hapticPath[Side.LEFT] },
-            .{ .action = m_input.vibrateAction, .binding = hapticPath[Side.RIGHT] },
+            .{ .action = this.input.grabAction, .binding = triggerValuePath[Side.LEFT] },
+            .{ .action = this.input.grabAction, .binding = triggerValuePath[Side.RIGHT] },
+            .{ .action = this.input.poseAction, .binding = posePath[Side.LEFT] },
+            .{ .action = this.input.poseAction, .binding = posePath[Side.RIGHT] },
+            .{ .action = this.input.quitAction, .binding = menuClickPath[Side.LEFT] },
+            .{ .action = this.input.quitAction, .binding = menuClickPath[Side.RIGHT] },
+            .{ .action = this.input.vibrateAction, .binding = hapticPath[Side.LEFT] },
+            .{ .action = this.input.vibrateAction, .binding = hapticPath[Side.RIGHT] },
         };
         var suggestedBindings: c.XrInteractionProfileSuggestedBinding = .{
             .type = c.XR_TYPE_INTERACTION_PROFILE_SUGGESTED_BINDING,
@@ -191,14 +213,14 @@ pub fn InitializeActions(instance: c.XrInstance, session: c.XrSession) XrError!v
         var indexControllerInteractionProfilePath: c.XrPath = undefined;
         _ = try XrResult.init(c.xrStringToPath(instance, "/interaction_profiles/valve/index_controller", &indexControllerInteractionProfilePath));
         const bindings = [_]c.XrActionSuggestedBinding{
-            .{ .action = m_input.grabAction, .binding = squeezeForcePath[Side.LEFT] },
-            .{ .action = m_input.grabAction, .binding = squeezeForcePath[Side.RIGHT] },
-            .{ .action = m_input.poseAction, .binding = posePath[Side.LEFT] },
-            .{ .action = m_input.poseAction, .binding = posePath[Side.RIGHT] },
-            .{ .action = m_input.quitAction, .binding = bClickPath[Side.LEFT] },
-            .{ .action = m_input.quitAction, .binding = bClickPath[Side.RIGHT] },
-            .{ .action = m_input.vibrateAction, .binding = hapticPath[Side.LEFT] },
-            .{ .action = m_input.vibrateAction, .binding = hapticPath[Side.RIGHT] },
+            .{ .action = this.input.grabAction, .binding = squeezeForcePath[Side.LEFT] },
+            .{ .action = this.input.grabAction, .binding = squeezeForcePath[Side.RIGHT] },
+            .{ .action = this.input.poseAction, .binding = posePath[Side.LEFT] },
+            .{ .action = this.input.poseAction, .binding = posePath[Side.RIGHT] },
+            .{ .action = this.input.quitAction, .binding = bClickPath[Side.LEFT] },
+            .{ .action = this.input.quitAction, .binding = bClickPath[Side.RIGHT] },
+            .{ .action = this.input.vibrateAction, .binding = hapticPath[Side.LEFT] },
+            .{ .action = this.input.vibrateAction, .binding = hapticPath[Side.RIGHT] },
         };
         var suggestedBindings: c.XrInteractionProfileSuggestedBinding = .{
             .type = c.XR_TYPE_INTERACTION_PROFILE_SUGGESTED_BINDING,
@@ -213,14 +235,14 @@ pub fn InitializeActions(instance: c.XrInstance, session: c.XrSession) XrError!v
         var microsoftMixedRealityInteractionProfilePath: c.XrPath = undefined;
         _ = try XrResult.init(c.xrStringToPath(instance, "/interaction_profiles/microsoft/motion_controller", &microsoftMixedRealityInteractionProfilePath));
         const bindings = [_]c.XrActionSuggestedBinding{
-            .{ .action = m_input.grabAction, .binding = squeezeClickPath[Side.LEFT] },
-            .{ .action = m_input.grabAction, .binding = squeezeClickPath[Side.RIGHT] },
-            .{ .action = m_input.poseAction, .binding = posePath[Side.LEFT] },
-            .{ .action = m_input.poseAction, .binding = posePath[Side.RIGHT] },
-            .{ .action = m_input.quitAction, .binding = menuClickPath[Side.LEFT] },
-            .{ .action = m_input.quitAction, .binding = menuClickPath[Side.RIGHT] },
-            .{ .action = m_input.vibrateAction, .binding = hapticPath[Side.LEFT] },
-            .{ .action = m_input.vibrateAction, .binding = hapticPath[Side.RIGHT] },
+            .{ .action = this.input.grabAction, .binding = squeezeClickPath[Side.LEFT] },
+            .{ .action = this.input.grabAction, .binding = squeezeClickPath[Side.RIGHT] },
+            .{ .action = this.input.poseAction, .binding = posePath[Side.LEFT] },
+            .{ .action = this.input.poseAction, .binding = posePath[Side.RIGHT] },
+            .{ .action = this.input.quitAction, .binding = menuClickPath[Side.LEFT] },
+            .{ .action = this.input.quitAction, .binding = menuClickPath[Side.RIGHT] },
+            .{ .action = this.input.vibrateAction, .binding = hapticPath[Side.LEFT] },
+            .{ .action = this.input.vibrateAction, .binding = hapticPath[Side.RIGHT] },
         };
         var suggestedBindings: c.XrInteractionProfileSuggestedBinding = .{
             .type = c.XR_TYPE_INTERACTION_PROFILE_SUGGESTED_BINDING,
@@ -233,30 +255,48 @@ pub fn InitializeActions(instance: c.XrInstance, session: c.XrSession) XrError!v
 
     var actionSpaceInfo: c.XrActionSpaceCreateInfo = .{
         .type = c.XR_TYPE_ACTION_SPACE_CREATE_INFO,
-        .action = m_input.poseAction,
+        .action = this.input.poseAction,
         .poseInActionSpace = .{ .orientation = .{ .w = 1.0 } },
-        .subactionPath = m_input.handSubactionPath[Side.LEFT],
+        .subactionPath = this.input.handSubactionPath[Side.LEFT],
     };
-    _ = try XrResult.init(c.xrCreateActionSpace(session, &actionSpaceInfo, &m_input.handSpace[Side.LEFT]));
-    actionSpaceInfo.subactionPath = m_input.handSubactionPath[Side.RIGHT];
-    _ = try XrResult.init(c.xrCreateActionSpace(session, &actionSpaceInfo, &m_input.handSpace[Side.RIGHT]));
+    _ = try XrResult.init(c.xrCreateActionSpace(session, &actionSpaceInfo, &this.input.handSpace[Side.LEFT]));
+    actionSpaceInfo.subactionPath = this.input.handSubactionPath[Side.RIGHT];
+    _ = try XrResult.init(c.xrCreateActionSpace(session, &actionSpaceInfo, &this.input.handSpace[Side.RIGHT]));
 
     var attachInfo: c.XrSessionActionSetsAttachInfo = .{
         .type = c.XR_TYPE_SESSION_ACTION_SETS_ATTACH_INFO,
         .countActionSets = 1,
-        .actionSets = &m_input.actionSet,
+        .actionSets = &this.input.actionSet,
     };
     _ = try XrResult.init(c.xrAttachSessionActionSets(session, &attachInfo));
+
+    return this;
 }
 
-pub fn LogEvent(allocator: std.mem.Allocator, session: c.XrSession) !void {
-    try LogActionSourceName(allocator, session, m_input.grabAction, "Grab");
-    try LogActionSourceName(allocator, session, m_input.quitAction, "Quit");
-    try LogActionSourceName(allocator, session, m_input.poseAction, "Pose");
-    try LogActionSourceName(allocator, session, m_input.vibrateAction, "Vibrate");
+pub fn deinit(this: *@This()) void {
+    std.log.info("## Action.deinit ##", .{});
+    this.cubes.deinit(this.allocator);
+    if (this.input.actionSet != null) {
+        for (hands) |hand| {
+            _ = c.xrDestroySpace(this.input.handSpace[hand]);
+        }
+        _ = c.xrDestroyActionSet(this.input.actionSet);
+    }
+
+    for (this.visualizedSpaces.items) |space| {
+        _ = c.xrDestroySpace(space);
+    }
+    this.visualizedSpaces.deinit(this.allocator);
 }
 
-fn LogActionSourceName(
+pub fn logEvent(this: *@This()) !void {
+    try logActionSourceName(this.allocator, this.session, this.input.grabAction, "Grab");
+    try logActionSourceName(this.allocator, this.session, this.input.quitAction, "Quit");
+    try logActionSourceName(this.allocator, this.session, this.input.poseAction, "Pose");
+    try logActionSourceName(this.allocator, this.session, this.input.vibrateAction, "Vibrate");
+}
+
+fn logActionSourceName(
     allocator: std.mem.Allocator,
     session: c.XrSession,
     action: c.XrAction,
@@ -307,30 +347,30 @@ fn LogActionSourceName(
     });
 }
 
-pub fn PollActions(session: c.XrSession) XrError!void {
-    m_input.handActive = .{ c.XR_FALSE, c.XR_FALSE };
+pub fn pollActions(this: *@This()) XrError!void {
+    this.input.handActive = .{ c.XR_FALSE, c.XR_FALSE };
 
     // Sync actions
-    const activeActionSet: c.XrActiveActionSet = .{ .actionSet = m_input.actionSet, .subactionPath = c.XR_NULL_PATH };
+    const activeActionSet: c.XrActiveActionSet = .{ .actionSet = this.input.actionSet, .subactionPath = c.XR_NULL_PATH };
     var syncInfo: c.XrActionsSyncInfo = .{
         .type = c.XR_TYPE_ACTIONS_SYNC_INFO,
         .countActiveActionSets = 1,
         .activeActionSets = &activeActionSet,
     };
-    _ = try XrResult.init(c.xrSyncActions(session, &syncInfo));
+    _ = try XrResult.init(c.xrSyncActions(this.session, &syncInfo));
 
     // Get pose and grab action state and start haptic vibrate when hand is 90% squeezed.
     for (hands) |hand| {
         var getInfo: c.XrActionStateGetInfo = .{
             .type = c.XR_TYPE_ACTION_STATE_GET_INFO,
-            .action = m_input.grabAction,
-            .subactionPath = m_input.handSubactionPath[hand],
+            .action = this.input.grabAction,
+            .subactionPath = this.input.handSubactionPath[hand],
         };
         var grabValue: c.XrActionStateFloat = .{ .type = c.XR_TYPE_ACTION_STATE_FLOAT };
-        _ = try XrResult.init(c.xrGetActionStateFloat(session, &getInfo, &grabValue));
+        _ = try XrResult.init(c.xrGetActionStateFloat(this.session, &getInfo, &grabValue));
         if (grabValue.isActive == c.XR_TRUE) {
             // Scale the rendered hand by 1.0f (open) to 0.5f (fully squeezed).
-            m_input.handScale[hand] = 1.0 - 0.5 * grabValue.currentState;
+            this.input.handScale[hand] = 1.0 - 0.5 * grabValue.currentState;
             if (grabValue.currentState > 0.9) {
                 var vibration: c.XrHapticVibration = .{
                     .type = c.XR_TYPE_HAPTIC_VIBRATION,
@@ -340,29 +380,75 @@ pub fn PollActions(session: c.XrSession) XrError!void {
                 };
                 var hapticActionInfo: c.XrHapticActionInfo = .{
                     .type = c.XR_TYPE_HAPTIC_ACTION_INFO,
-                    .action = m_input.vibrateAction,
-                    .subactionPath = m_input.handSubactionPath[hand],
+                    .action = this.input.vibrateAction,
+                    .subactionPath = this.input.handSubactionPath[hand],
                 };
-                _ = try XrResult.init(c.xrApplyHapticFeedback(session, &hapticActionInfo, @ptrCast(&vibration)));
+                _ = try XrResult.init(c.xrApplyHapticFeedback(this.session, &hapticActionInfo, @ptrCast(&vibration)));
             }
         }
 
-        getInfo.action = m_input.poseAction;
+        getInfo.action = this.input.poseAction;
         var poseState: c.XrActionStatePose = .{ .type = c.XR_TYPE_ACTION_STATE_POSE };
-        _ = try XrResult.init(c.xrGetActionStatePose(session, &getInfo, &poseState));
-        m_input.handActive[hand] = poseState.isActive;
+        _ = try XrResult.init(c.xrGetActionStatePose(this.session, &getInfo, &poseState));
+        this.input.handActive[hand] = poseState.isActive;
     }
 
     // There were no subaction paths specified for the quit action, because we don't care which hand did it.
     var getInfo: c.XrActionStateGetInfo = .{
         .type = c.XR_TYPE_ACTION_STATE_GET_INFO,
         .next = null,
-        .action = m_input.quitAction,
+        .action = this.input.quitAction,
         .subactionPath = c.XR_NULL_PATH,
     };
     var quitValue: c.XrActionStateBoolean = .{ .type = c.XR_TYPE_ACTION_STATE_BOOLEAN };
-    _ = try XrResult.init(c.xrGetActionStateBoolean(session, &getInfo, &quitValue));
+    _ = try XrResult.init(c.xrGetActionStateBoolean(this.session, &getInfo, &quitValue));
     if ((quitValue.isActive == c.XR_TRUE) and (quitValue.changedSinceLastSync == c.XR_TRUE) and (quitValue.currentState == c.XR_TRUE)) {
-        _ = try XrResult.init(c.xrRequestExitSession(session));
+        _ = try XrResult.init(c.xrRequestExitSession(this.session));
     }
+}
+
+pub fn update(
+    this: *@This(),
+    space: c.XrSpace,
+    predictedDisplayTime: c.XrTime,
+) ![]const Cube {
+    try this.cubes.resize(this.allocator, 0);
+    // For each locatable space that we want to visualize, render a 25cm cube.
+    for (this.visualizedSpaces.items) |visualizedSpace| {
+        var spaceLocation: c.XrSpaceLocation = .{ .type = c.XR_TYPE_SPACE_LOCATION };
+        const res = try XrResult.init(c.xrLocateSpace(visualizedSpace, space, predictedDisplayTime, &spaceLocation));
+        if (res == .Success) {
+            if ((spaceLocation.locationFlags & c.XR_SPACE_LOCATION_POSITION_VALID_BIT) != 0 and
+                (spaceLocation.locationFlags & c.XR_SPACE_LOCATION_ORIENTATION_VALID_BIT) != 0)
+            {
+                try this.cubes.append(this.allocator, .init(spaceLocation.pose, .{ .x = 0.25, .y = 0.25, .z = 0.25 }));
+            }
+        } else {
+            std.log.debug("Unable to locate a visualized reference space in app space: {}", .{res});
+        }
+    }
+
+    // Render a 10cm cube scaled by grabAction for each hand. Note renderHand will only be
+    // true when the application has focus.
+    for (hands) |hand| {
+        var spaceLocation: c.XrSpaceLocation = .{ .type = c.XR_TYPE_SPACE_LOCATION };
+        const res = try XrResult.init(c.xrLocateSpace(this.input.handSpace[hand], space, predictedDisplayTime, &spaceLocation));
+        if (res == .Success) {
+            if ((spaceLocation.locationFlags & c.XR_SPACE_LOCATION_POSITION_VALID_BIT) != 0 and
+                (spaceLocation.locationFlags & c.XR_SPACE_LOCATION_ORIENTATION_VALID_BIT) != 0)
+            {
+                const scale = 0.1 * this.input.handScale[hand];
+                try this.cubes.append(this.allocator, .init(spaceLocation.pose, .{ .x = scale, .y = scale, .z = scale }));
+            }
+        } else {
+            // Tracking loss is expected when the hand is not active so only log a message
+            // if the hand is active.
+            if (this.input.handActive[hand] == c.XR_TRUE) {
+                const handName = [2][]const u8{ "left", "right" };
+                std.log.debug("Unable to locate {s} hand action space in app space: {}", .{ handName[hand], res });
+            }
+        }
+    }
+
+    return this.cubes.items;
 }

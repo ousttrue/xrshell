@@ -19,7 +19,7 @@ pub const Options = struct {
 };
 
 pub fn init(allocator: std.mem.Allocator, opts: Options) XrError!@This() {
-    std.log.info("xrshell.Instance.init()", .{});
+    std.log.info("## Instance.init ##", .{});
     // Log non-layer extensions (layerName==nullptr).
     // _ = try logExtensions(this.allocator, &.{}, 0);
 
@@ -89,7 +89,7 @@ pub fn init(allocator: std.mem.Allocator, opts: Options) XrError!@This() {
 }
 
 pub fn deinit(this: *@This()) void {
-    std.log.info("xrshell.Instance.deinit()", .{});
+    std.log.info("## Instance.deinit ##", .{});
     if (this.instance) |handle| {
         _ = c.xrDestroyInstance(handle);
     }

@@ -9,7 +9,6 @@ const XrError = xrs.XrError;
 const XrResult = xrs.XrResult;
 const Options = @import("Options.zig");
 const c = @import("c");
-const action = @import("action.zig");
 const Cube = @import("Cube.zig");
 const geometry = @import("geometry.zig");
 
@@ -33,8 +32,6 @@ swapchainImages: std.AutoHashMap(c.XrSwapchain, []*c.XrSwapchainImageBaseHeader)
 views: std.ArrayList(c.XrView) = .{},
 colorSwapchainFormat: i64 = -1,
 
-visualizedSpaces: std.ArrayList(c.XrSpace) = .{},
-
 projectionLayerViews: std.ArrayList(c.XrCompositionLayerProjectionView) = .{},
 
 pub fn init(
@@ -44,8 +41,7 @@ pub fn init(
     session: c.XrSession,
     options: *Options,
 ) @This() {
-    gfx.init(allocator);
-    action.init();
+    std.log.info("## OpenXrProgram.init ##", .{});
     return .{
         .allocator = allocator,
         .instance = instance,
@@ -57,34 +53,28 @@ pub fn init(
 }
 
 pub fn deinit(this: *@This()) void {
-    //     m_projectionLayerViews.deinit(allocator);
-    action.deinit();
-    gfx.deinit(this.allocator);
+    std.log.info("## OpenXrProgram.deinit ##", .{});
     {
-        //         var it = m_swapchainImages.iterator();
-        //         while (it.next()) |item| {
-        //             allocator.free(item.value_ptr.*);
-        //         }
+        var it = this.swapchainImages.iterator();
+        while (it.next()) |item| {
+            this.allocator.free(item.value_ptr.*);
+        }
         this.swapchainImages.deinit();
     }
-    //     m_configViews.deinit(allocator);
-    //
-    //     //     for (Swapchain swapchain : m_swapchains) {
-    //     //         xrDestroySwapchain(swapchain.handle);
-    //     //     }
-    //     m_swapchains.deinit(allocator);
-    //
-    //     m_views.deinit(allocator);
-    //
-    //     //     for (XrSpace visualizedSpace : m_visualizedSpaces) {
-    //     //         xrDestroySpace(visualizedSpace);
-    //     //     }
-    //     m_visualizedSpaces.deinit(allocator);
-    //
+
+    this.projectionLayerViews.deinit(this.allocator);
+    this.configViews.deinit(this.allocator);
+
+    for (this.swapchains.items) |swapchain| {
+        _ = c.xrDestroySwapchain(swapchain.handle);
+    }
+    this.swapchains.deinit(this.allocator);
+
+    this.views.deinit(this.allocator);
+
     //     //     if (m_appSpace != XR_NULL_HANDLE) {
     //     //         xrDestroySpace(m_appSpace);
     //     //     }
-
 }
 
 fn makeIndent(allocator: std.mem.Allocator, indent: usize) ![]const u8 {
@@ -122,21 +112,6 @@ fn logExtensions(allocator: std.mem.Allocator, _layerName: []const u8, indent: u
 }
 
 var version_str: [64]u8 = undefined;
-
-pub fn run_frame(this: *@This()) !void {
-    try action.PollActions(this.session);
-    // try OpenXrProgram.oRenderFrame(allocator);
-    const frameState = try this.beginFrame();
-    var layer: ?*c.XrCompositionLayerBaseHeader = null;
-    if (frameState.shouldRender == c.XR_TRUE) {
-        if (try this.locate(frameState.predictedDisplayTime)) {
-            layer = try this.RenderLayer(
-                frameState.predictedDisplayTime,
-            );
-        }
-    }
-    try this.endFrame(frameState.predictedDisplayTime, layer);
-}
 
 fn LogEnvironmentBlendMode(this: *@This(), _type: c.XrViewConfigurationType) XrError!void {
     var count: u32 = undefined;
@@ -292,23 +267,6 @@ pub fn LogReferenceSpaces(this: *@This()) XrError!void {
     }
 }
 
-pub fn CreateVisualizedSpaces(this: *@This()) !void {
-    const visualizedSpaces = [_][]const u8{
-        "ViewFront", "Local", "Stage", "StageLeft", "StageRight", "StageLeftRotated", "StageRightRotated",
-    };
-
-    for (visualizedSpaces) |visualizedSpace| {
-        const referenceSpaceCreateInfo = geometry.GetXrReferenceSpaceCreateInfo(visualizedSpace);
-        var space: c.XrSpace = undefined;
-        const res = c.xrCreateReferenceSpace(this.session, &referenceSpaceCreateInfo, &space);
-        if (c.XR_SUCCEEDED(res)) {
-            try this.visualizedSpaces.append(this.allocator, space);
-        } else {
-            std.log.warn("Failed to create reference space {s} with error {}", .{ visualizedSpace, res });
-        }
-    }
-}
-
 pub fn CreateSwapchains(this: *@This()) XrError!void {
     // Read graphics properties for preferred swapchain length and logging.
     var systemProperties: c.XrSystemProperties = .{ .type = c.XR_TYPE_SYSTEM_PROPERTIES };
@@ -438,55 +396,15 @@ pub fn CreateSwapchains(this: *@This()) XrError!void {
     }
 }
 
-pub fn RenderLayer(
+pub fn renderLayer(
     this: *@This(),
-    predictedDisplayTime: c.XrTime,
+    cubes: []const Cube,
 ) !*c.XrCompositionLayerBaseHeader {
     // std.debug.assert(viewCountOutput == viewCapacityInput);
     // std.debug.assert(viewCountOutput == m_configViews.items.len);
     // std.debug.assert(viewCountOutput == m_swapchains.items.len);
 
     try this.projectionLayerViews.resize(this.allocator, this.views.items.len);
-
-    // For each locatable space that we want to visualize, render a 25cm cube.
-    var cubes: std.ArrayList(Cube) = .{};
-    defer cubes.deinit(this.allocator);
-    for (this.visualizedSpaces.items) |visualizedSpace| {
-        var spaceLocation: c.XrSpaceLocation = .{ .type = c.XR_TYPE_SPACE_LOCATION };
-        const res = try XrResult.init(c.xrLocateSpace(visualizedSpace, this.appSpace, predictedDisplayTime, &spaceLocation));
-        if (res == .Success) {
-            if ((spaceLocation.locationFlags & c.XR_SPACE_LOCATION_POSITION_VALID_BIT) != 0 and
-                (spaceLocation.locationFlags & c.XR_SPACE_LOCATION_ORIENTATION_VALID_BIT) != 0)
-            {
-                try cubes.append(this.allocator, .init(spaceLocation.pose, .{ .x = 0.25, .y = 0.25, .z = 0.25 }));
-            }
-        } else {
-            std.log.debug("Unable to locate a visualized reference space in app space: {}", .{res});
-        }
-    }
-
-    // Render a 10cm cube scaled by grabAction for each hand. Note renderHand will only be
-    // true when the application has focus.
-    const hands = [2]usize{ action.Side.LEFT, action.Side.RIGHT };
-    for (hands) |hand| {
-        var spaceLocation: c.XrSpaceLocation = .{ .type = c.XR_TYPE_SPACE_LOCATION };
-        const res = try XrResult.init(c.xrLocateSpace(action.m_input.handSpace[hand], this.appSpace, predictedDisplayTime, &spaceLocation));
-        if (res == .Success) {
-            if ((spaceLocation.locationFlags & c.XR_SPACE_LOCATION_POSITION_VALID_BIT) != 0 and
-                (spaceLocation.locationFlags & c.XR_SPACE_LOCATION_ORIENTATION_VALID_BIT) != 0)
-            {
-                const scale = 0.1 * action.m_input.handScale[hand];
-                try cubes.append(this.allocator, .init(spaceLocation.pose, .{ .x = scale, .y = scale, .z = scale }));
-            }
-        } else {
-            // Tracking loss is expected when the hand is not active so only log a message
-            // if the hand is active.
-            if (action.m_input.handActive[hand] == c.XR_TRUE) {
-                const handName = [2][]const u8{ "left", "right" };
-                std.log.debug("Unable to locate {s} hand action space in app space: {}", .{ handName[hand], res });
-            }
-        }
-    }
 
     // Render view to the appropriate part of the swapchain image.
     for (this.swapchains.items, 0..) |viewSwapchain, i| {
@@ -516,12 +434,12 @@ pub fn RenderLayer(
 
         const entry = this.swapchainImages.get(viewSwapchain.handle).?;
         const swapchainImage: *c.XrSwapchainImageBaseHeader = entry[swapchainImageIndex];
-        try gfx.RenderView(
+        try gfx.renderView(
             &this.projectionLayerViews.items[i],
             swapchainImage,
             this.colorSwapchainFormat,
             Options.GetBackgroundClearColor(try this.GetPreferredBlendMode()),
-            cubes.items,
+            cubes,
         );
 
         var releaseInfo: c.XrSwapchainImageReleaseInfo = .{ .type = c.XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO };

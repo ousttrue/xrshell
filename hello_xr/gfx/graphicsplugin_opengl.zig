@@ -59,11 +59,13 @@ var m_cubeIndexBuffer: c.GLuint = 0;
 var m_colorToDepthMap: std.AutoHashMap(u32, u32) = undefined;
 
 pub fn init(allocator: std.mem.Allocator) void {
+    std.log.info("## OpenGL.init ##", .{});
     std.log.info("GFX => OpenGL", .{});
     m_colorToDepthMap = .init(allocator);
 }
 
 pub fn deinit(allocator: std.mem.Allocator) void {
+    std.log.info("## OpenGL.deinit ##", .{});
     for (m_swapchainImageBuffers.items) |buf| {
         allocator.free(buf);
     }
@@ -87,7 +89,7 @@ pub fn deinit(allocator: std.mem.Allocator) void {
 
     var it = m_colorToDepthMap.iterator();
     while (it.next()) |e| {
-        c.glDeleteTextures(1, e.value_ptr.*);
+        c.glDeleteTextures(1, e.value_ptr);
     }
     m_colorToDepthMap.deinit();
 
@@ -292,12 +294,12 @@ fn GetDepthTexture(colorTexture: u32) !u32 {
     return depthTexture;
 }
 
-pub fn RenderView(
+pub fn renderView(
     layerView: *const c.XrCompositionLayerProjectionView,
     swapchainImage: *const c.XrSwapchainImageBaseHeader,
     swapchainFormat: i64,
     clear_color: [4]f32,
-    cubes: []Cube,
+    cubes: []const Cube,
 ) !void {
     _ = swapchainFormat;
     std.debug.assert(layerView.subImage.imageArrayIndex == 0); // Texture arrays not supported.

@@ -12,7 +12,7 @@ pub fn init(
     systemId: c.XrSystemId,
     graphics_binding: *c.XrBaseInStructure,
 ) !@This() {
-    std.log.debug("Creating session...", .{});
+    std.log.info("## Session.init ##", .{});
 
     var this = @This(){};
 
@@ -27,6 +27,7 @@ pub fn init(
 }
 
 pub fn deinit(this: *@This()) void {
+    std.log.info("## Session.deinit ##", .{});
     _ = c.xrDestroySession(this.session);
 }
 

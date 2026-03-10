@@ -5,7 +5,6 @@ const xrs = @import("xrshell/xrshell.zig");
 const XrError = xrs.XrError;
 const XrResult = xrs.XrResult;
 const OpenXrProgram = @import("OpenXrProgram.zig");
-const action = @import("action.zig");
 const Options = @import("Options.zig");
 const QuitKeyObserver = @import("QuitKeyObserver.zig");
 const console_color_logger = @import("console_color_logger.zig");
@@ -43,7 +42,9 @@ pub fn main() !void {
         });
         defer instance.deinit();
 
+        gfx.init(allocator);
         try gfx.InitializeDevice(instance.instance, instance.systemId);
+        defer gfx.deinit(allocator);
 
         var session = try xrs.Session.init(
             instance.instance,
@@ -65,8 +66,9 @@ pub fn main() !void {
         try prog.LogViewConfigurations();
 
         try prog.LogReferenceSpaces();
-        try action.InitializeActions(prog.instance, prog.session);
-        try prog.CreateVisualizedSpaces();
+
+        var action = try xrs.Action.init(allocator, prog.instance, prog.session);
+        defer action.deinit();
 
         {
             const referenceSpaceCreateInfo = geometry.GetXrReferenceSpaceCreateInfo(prog.options.AppSpace.span());
@@ -85,7 +87,21 @@ pub fn main() !void {
                 },
                 .next => {
                     if (isSessionRunning) {
-                        try prog.run_frame();
+                        try action.pollActions();
+
+                        // try prog.run_frame(cubes);
+                        // try OpenXrProgram.oRenderFrame(allocator);
+                        const frameState = try prog.beginFrame();
+                        var layer: ?*c.XrCompositionLayerBaseHeader = null;
+                        if (frameState.shouldRender == c.XR_TRUE) {
+                            if (try prog.locate(frameState.predictedDisplayTime)) {
+                                const cubes = try action.update(prog.appSpace, frameState.predictedDisplayTime);
+                                layer = try prog.renderLayer(
+                                    cubes,
+                                );
+                            }
+                        }
+                        try prog.endFrame(frameState.predictedDisplayTime, layer);
                     } else {
                         // Throttle loop since xrWaitFrame won't be called.
                         std.Thread.sleep(std.time.ns_per_ms * 250);

@@ -3,6 +3,7 @@ pub const XrResult = xr_result.XrResult;
 pub const XrError = xr_result.XrError;
 pub const Instance = @import("Instance.zig");
 pub const Session = @import("Session.zig");
+pub const Action = @import("Action.zig");
 
 // pub fn ThrowXrResult(sourceLocation: std.builtin.SourceLocation, res: c.XrResult, originator: []const u8) void {
 //     std.log.err("XrResult failure [{s}] {s} {}", .{ to_string(res), originator, sourceLocation });
