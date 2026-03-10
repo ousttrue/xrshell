@@ -9,25 +9,9 @@ const XrError = xr_util.XrError;
 const XrResult = xr_util.XrResult;
 const Options = @import("Options.zig");
 const c = @import("c");
+const action = @import("action.zig");
 const Cube = @import("Cube.zig");
 const geometry = @import("geometry.zig");
-const action = @import("action.zig");
-
-var version_str: [64]u8 = undefined;
-fn GetXrVersionString(ver: c.XrVersion) []const u8 {
-    return std.fmt.bufPrint(&version_str, "{}.{}.{}", .{
-        c.XR_VERSION_MAJOR(ver),
-        c.XR_VERSION_MINOR(ver),
-        c.XR_VERSION_PATCH(ver),
-    }) catch @panic("OOM");
-}
-
-var m_options: *Options = undefined;
-var m_instance: c.XrInstance = null;
-var m_session: c.XrSession = null;
-var m_appSpace: c.XrSpace = null;
-var m_systemId: c.XrSystemId = c.XR_NULL_SYSTEM_ID;
-var m_layer: c.XrCompositionLayerProjection = .{ .type = c.XR_TYPE_COMPOSITION_LAYER_PROJECTION };
 
 const Swapchain = struct {
     handle: c.XrSwapchain,
@@ -35,67 +19,77 @@ const Swapchain = struct {
     height: u32,
 };
 
-var m_configViews: std.ArrayList(c.XrViewConfigurationView) = .{};
-var m_swapchains: std.ArrayList(Swapchain) = .{};
-var m_swapchainImages: std.AutoHashMap(c.XrSwapchain, []*c.XrSwapchainImageBaseHeader) = undefined;
-var m_views: std.ArrayList(c.XrView) = .{};
-var m_colorSwapchainFormat: i64 = -1;
+allocator: std.mem.Allocator,
+quit_key: *const bool,
+options: *Options,
+instance: c.XrInstance = null,
+systemId: c.XrSystemId = c.XR_NULL_SYSTEM_ID,
+session: c.XrSession = null,
+appSpace: c.XrSpace = null,
+layer: c.XrCompositionLayerProjection = .{ .type = c.XR_TYPE_COMPOSITION_LAYER_PROJECTION },
 
-var m_visualizedSpaces: std.ArrayList(c.XrSpace) = .{};
+swapchains: std.ArrayList(Swapchain) = .{},
+configViews: std.ArrayList(c.XrViewConfigurationView) = .{},
+swapchainImages: std.AutoHashMap(c.XrSwapchain, []*c.XrSwapchainImageBaseHeader),
+views: std.ArrayList(c.XrView) = .{},
+colorSwapchainFormat: i64 = -1,
+
+visualizedSpaces: std.ArrayList(c.XrSpace) = .{},
 
 // Application's current lifecycle state according to the runtime
-var m_sessionState: c.XrSessionState = c.XR_SESSION_STATE_UNKNOWN;
-var m_sessionRunning: bool = false;
+sessionState: c.XrSessionState = c.XR_SESSION_STATE_UNKNOWN,
+sessionRunning: bool = false,
 
-var m_eventDataBuffer: c.XrEventDataBuffer = undefined;
-var m_projectionLayerViews: std.ArrayList(c.XrCompositionLayerProjectionView) = .{};
+eventDataBuffer: c.XrEventDataBuffer = undefined,
+projectionLayerViews: std.ArrayList(c.XrCompositionLayerProjectionView) = .{},
 
-pub fn init(allocator: std.mem.Allocator, options: *Options) void {
-    m_options = options;
-    m_swapchainImages = .init(allocator);
-    gfx.init(allocator, options);
-    // platformplugin.UpdateOptions(options);
-    // graphicsplugin.UpdateOptions(options);
+pub fn init(allocator: std.mem.Allocator, options: *Options, quit_key: *const bool) @This() {
+    gfx.init(allocator);
     action.init();
+    return .{
+        .allocator = allocator,
+        .quit_key = quit_key,
+        .options = options,
+        .swapchainImages = .init(allocator),
+    };
 }
 
-pub fn deinit(allocator: std.mem.Allocator) void {
-    m_projectionLayerViews.deinit(allocator);
+pub fn deinit(this: *@This()) void {
+    //     m_projectionLayerViews.deinit(allocator);
     action.deinit();
-
-    gfx.deinit(allocator);
+    gfx.deinit(this.allocator);
     {
-        var it = m_swapchainImages.iterator();
-        while (it.next()) |item| {
-            allocator.free(item.value_ptr.*);
-        }
-        m_swapchainImages.deinit();
+        //         var it = m_swapchainImages.iterator();
+        //         while (it.next()) |item| {
+        //             allocator.free(item.value_ptr.*);
+        //         }
+        this.swapchainImages.deinit();
     }
-    m_configViews.deinit(allocator);
-
-    //     for (Swapchain swapchain : m_swapchains) {
-    //         xrDestroySwapchain(swapchain.handle);
-    //     }
-    m_swapchains.deinit(allocator);
-
-    m_views.deinit(allocator);
-
-    //     for (XrSpace visualizedSpace : m_visualizedSpaces) {
-    //         xrDestroySpace(visualizedSpace);
-    //     }
-    m_visualizedSpaces.deinit(allocator);
-
-    //     if (m_appSpace != XR_NULL_HANDLE) {
-    //         xrDestroySpace(m_appSpace);
-    //     }
-
-    //     if (m_session != XR_NULL_HANDLE) {
-    //         xrDestroySession(m_session);
-    //     }
-
-    //     if (m_instance != XR_NULL_HANDLE) {
-    //         xrDestroyInstance(m_instance);
-    //     }
+    //     m_configViews.deinit(allocator);
+    //
+    //     //     for (Swapchain swapchain : m_swapchains) {
+    //     //         xrDestroySwapchain(swapchain.handle);
+    //     //     }
+    //     m_swapchains.deinit(allocator);
+    //
+    //     m_views.deinit(allocator);
+    //
+    //     //     for (XrSpace visualizedSpace : m_visualizedSpaces) {
+    //     //         xrDestroySpace(visualizedSpace);
+    //     //     }
+    //     m_visualizedSpaces.deinit(allocator);
+    //
+    //     //     if (m_appSpace != XR_NULL_HANDLE) {
+    //     //         xrDestroySpace(m_appSpace);
+    //     //     }
+    //
+    //     //     if (m_session != XR_NULL_HANDLE) {
+    //     //         xrDestroySession(m_session);
+    //     //     }
+    //
+    //     //     if (m_instance != XR_NULL_HANDLE) {
+    //     //         xrDestroyInstance(m_instance);
+    //     //     }
 }
 
 fn makeIndent(allocator: std.mem.Allocator, indent: usize) ![]const u8 {
@@ -132,17 +126,25 @@ fn logExtensions(allocator: std.mem.Allocator, _layerName: []const u8, indent: u
     }
 }
 
-fn LogLayersAndExtensions(allocator: std.mem.Allocator) XrError!void {
+fn getXrVersionString(buf: []u8, ver: c.XrVersion) []const u8 {
+    return std.fmt.bufPrint(buf, "{}.{}.{}", .{
+        c.XR_VERSION_MAJOR(ver),
+        c.XR_VERSION_MINOR(ver),
+        c.XR_VERSION_PATCH(ver),
+    }) catch @panic("OOM");
+}
 
+pub fn run(this: *@This(), instance_create_info: ?*anyopaque) !bool {
     // Log non-layer extensions (layerName==nullptr).
-    _ = try logExtensions(allocator, &.{}, 0);
+    _ = try logExtensions(this.allocator, &.{}, 0);
 
     // Log layers and any of their extensions.
+    var version_str: [64]u8 = undefined;
     {
         var layerCount: u32 = undefined;
         _ = try XrResult.init(c.xrEnumerateApiLayerProperties(0, &layerCount, null));
-        const layers = try allocator.alloc(c.XrApiLayerProperties, layerCount);
-        defer allocator.free(layers);
+        const layers = try this.allocator.alloc(c.XrApiLayerProperties, layerCount);
+        defer this.allocator.free(layers);
         for (layers) |*l| {
             l.* = .{ .type = c.XR_TYPE_API_LAYER_PROPERTIES };
         }
@@ -151,164 +153,248 @@ fn LogLayersAndExtensions(allocator: std.mem.Allocator) XrError!void {
         for (layers) |layer| {
             std.log.debug("  Name={s} SpecVersion={s} LayerVersion={} Description={s}", .{
                 layer.layerName,
-                GetXrVersionString(layer.specVersion),
+                getXrVersionString(&version_str, layer.specVersion),
                 layer.layerVersion,
                 layer.description,
             });
-            try logExtensions(allocator, std.mem.sliceTo(&layer.layerName, 0), 4);
+            try logExtensions(this.allocator, std.mem.sliceTo(&layer.layerName, 0), 4);
         }
     }
-}
-
-fn CreateInstanceInternal(allocator: std.mem.Allocator, instance_create_info: ?*const anyopaque) XrError!void {
-    std.debug.assert(m_instance == null);
-
-    const gfx_extensions = gfx.GetInstanceExtensions();
 
     // Create union of extensions required by platform and graphics plugins.
+    const gfx_extensions = gfx.GetInstanceExtensions();
     var extensions: std.ArrayList([*:0]const u8) = .{};
-    defer extensions.deinit(allocator);
+    defer extensions.deinit(this.allocator);
     for (gfx_extensions, 0..) |e, i| {
         const p: [*:0]const u8 = @ptrCast(e);
         std.log.info("GFX[{}]extension: {s}", .{ i, std.mem.span(p) });
-        try extensions.append(allocator, e);
+        try extensions.append(this.allocator, e);
     }
 
-    var createInfo: c.XrInstanceCreateInfo = .{
-        .type = c.XR_TYPE_INSTANCE_CREATE_INFO,
-        .next = instance_create_info,
-        .enabledExtensionCount = @intCast(extensions.items.len),
-        .enabledExtensionNames = extensions.items.ptr,
-        .applicationInfo = .{},
-    };
-
-    _ = std.fmt.bufPrintZ(&createInfo.applicationInfo.applicationName, "{s}", .{"HelloXR"}) catch @panic("OOM");
-
-    // Current version is 1.1.x, but hello_xr only requires 1.0.x
-    createInfo.applicationInfo.apiVersion = c.XR_API_VERSION_1_0;
-
-    _ = try XrResult.init(c.xrCreateInstance(&createInfo, &m_instance));
-}
-
-fn LogInstanceInfo() XrError!void {
-    std.debug.assert(m_instance != null);
+    {
+        var createInfo: c.XrInstanceCreateInfo = .{
+            .type = c.XR_TYPE_INSTANCE_CREATE_INFO,
+            .next = instance_create_info,
+            .enabledExtensionCount = @intCast(extensions.items.len),
+            .enabledExtensionNames = extensions.items.ptr,
+            .applicationInfo = .{},
+        };
+        _ = std.fmt.bufPrintZ(&createInfo.applicationInfo.applicationName, "{s}", .{"HelloXR"}) catch @panic("OOM");
+        // Current version is 1.1.x, but hello_xr only requires 1.0.x
+        createInfo.applicationInfo.apiVersion = c.XR_API_VERSION_1_0;
+        _ = try XrResult.init(c.xrCreateInstance(&createInfo, &this.instance));
+    }
 
     var instanceProperties: c.XrInstanceProperties = .{ .type = c.XR_TYPE_INSTANCE_PROPERTIES };
-    _ = try XrResult.init(c.xrGetInstanceProperties(m_instance, &instanceProperties));
-
+    _ = try XrResult.init(c.xrGetInstanceProperties(this.instance, &instanceProperties));
     std.log.info("Instance RuntimeName={s} RuntimeVersion={s}", .{
         instanceProperties.runtimeName,
-        GetXrVersionString(instanceProperties.runtimeVersion),
+        getXrVersionString(&version_str, instanceProperties.runtimeVersion),
     });
+
+    const systemInfo: c.XrSystemGetInfo = .{
+        .type = c.XR_TYPE_SYSTEM_GET_INFO,
+        .formFactor = this.options.parsed.FormFactor,
+    };
+    _ = try XrResult.init(c.xrGetSystem(this.instance, &systemInfo, &this.systemId));
+    std.log.debug("Using system {} for form factor {}", .{
+        this.systemId,
+        this.options.parsed.FormFactor,
+    });
+
+    try this.LogViewConfigurations();
+
+    // The graphics API can initialize the graphics device now that the systemId and instance
+    // handle are available.
+    try gfx.InitializeDevice(this.instance, this.systemId);
+
+    {
+        std.log.debug("Creating session...", .{});
+
+        var createInfo: c.XrSessionCreateInfo = .{
+            .type = c.XR_TYPE_SESSION_CREATE_INFO,
+            .next = gfx.GetGraphicsBinding(),
+            .systemId = this.systemId,
+        };
+        _ = try XrResult.init(c.xrCreateSession(this.instance, &createInfo, &this.session));
+    }
+
+    try this.LogReferenceSpaces();
+    try action.InitializeActions(this.instance, this.session);
+    try this.CreateVisualizedSpaces();
+
+    {
+        const referenceSpaceCreateInfo = geometry.GetXrReferenceSpaceCreateInfo(this.options.AppSpace.span());
+        _ = try XrResult.init(c.xrCreateReferenceSpace(this.session, &referenceSpaceCreateInfo, &this.appSpace));
+    }
+
+    try this.CreateSwapchains();
+
+    while (!this.quit_key.*) {
+        switch (try this.run_frame()) {
+            .next => {},
+            .quit => {
+                return false;
+            },
+            .restart => {
+                return true;
+            },
+        }
+    }
+
+    return false;
 }
 
-pub fn CreateInstance(allocator: std.mem.Allocator, instance_create_info: ?*const anyopaque) !void {
-    try LogLayersAndExtensions(allocator);
-    try CreateInstanceInternal(allocator, instance_create_info);
-    try LogInstanceInfo();
+fn run_frame(this: *@This()) !NextFrame {
+    const next = try this.PollEvents();
+    switch (next) {
+        .quit => {
+            return .quit;
+        },
+        .restart => {
+            return .restart;
+        },
+        .render => {},
+    }
+
+    if (this.IsSessionRunning()) {
+        try action.PollActions(this.session);
+        // try OpenXrProgram.oRenderFrame(allocator);
+        const frameState = try this.beginFrame();
+        var layer: ?*c.XrCompositionLayerBaseHeader = null;
+        if (frameState.shouldRender == c.XR_TRUE) {
+            if (try this.locate(frameState.predictedDisplayTime)) {
+                layer = try this.RenderLayer(
+                    frameState.predictedDisplayTime,
+                );
+            }
+        }
+        try this.endFrame(frameState.predictedDisplayTime, layer);
+    } else {
+        // Throttle loop since xrWaitFrame won't be called.
+        std.Thread.sleep(std.time.ns_per_ms * 250);
+    }
+    return .next;
 }
 
-fn LogEnvironmentBlendMode(allocator: std.mem.Allocator, _type: c.XrViewConfigurationType) XrError!void {
-    std.debug.assert(m_instance != null);
-    std.debug.assert(m_systemId != 0);
-
+fn LogEnvironmentBlendMode(this: *@This(), _type: c.XrViewConfigurationType) XrError!void {
     var count: u32 = undefined;
-    _ = try XrResult.init(c.xrEnumerateEnvironmentBlendModes(m_instance, m_systemId, _type, 0, &count, null));
+    _ = try XrResult.init(c.xrEnumerateEnvironmentBlendModes(this.instance, this.systemId, _type, 0, &count, null));
     std.debug.assert(count > 0);
 
     std.log.info("Available Environment Blend Mode count : ({})", .{count});
 
-    const blendModes = try allocator.alloc(c.XrEnvironmentBlendMode, count);
-    defer allocator.free(blendModes);
-    _ = try XrResult.init(c.xrEnumerateEnvironmentBlendModes(m_instance, m_systemId, _type, count, &count, blendModes.ptr));
+    const blendModes = try this.allocator.alloc(c.XrEnvironmentBlendMode, count);
+    defer this.allocator.free(blendModes);
+    _ = try XrResult.init(c.xrEnumerateEnvironmentBlendModes(this.instance, this.systemId, _type, count, &count, blendModes.ptr));
 
     var blendModeFound = false;
     for (blendModes) |mode| {
-        const blendModeMatch = (mode == m_options.parsed.EnvironmentBlendMode);
+        const blendModeMatch = (mode == this.GetPreferredBlendMode() catch @panic("OOM"));
         std.log.info("Environment Blend Mode ({}) : {s}", .{ mode, if (blendModeMatch) "(Selected)" else "" });
         blendModeFound |= blendModeMatch;
     }
     std.debug.assert(blendModeFound);
 }
 
-const m_acceptableBlendModes = [_]c.XrEnvironmentBlendMode{
-    c.XR_ENVIRONMENT_BLEND_MODE_OPAQUE,
-    c.XR_ENVIRONMENT_BLEND_MODE_ADDITIVE,
-    c.XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND,
-};
-
-pub fn GetPreferredBlendMode(allocator: std.mem.Allocator) !c.XrEnvironmentBlendMode {
+pub fn GetPreferredBlendMode(this: *@This()) !c.XrEnvironmentBlendMode {
     var count: u32 = undefined;
-    _ = try XrResult.init(c.xrEnumerateEnvironmentBlendModes(m_instance, m_systemId, m_options.parsed.ViewConfigType, 0, &count, null));
-    std.debug.assert(count > 0);
-
-    const blendModes = try allocator.alloc(c.XrEnvironmentBlendMode, count);
-    defer allocator.free(blendModes);
-    _ = try XrResult.init(c.xrEnumerateEnvironmentBlendModes(m_instance, m_systemId, m_options.parsed.ViewConfigType, count, &count, blendModes.ptr));
+    _ = try XrResult.init(c.xrEnumerateEnvironmentBlendModes(
+        this.instance,
+        this.systemId,
+        this.options.parsed.ViewConfigType,
+        0,
+        &count,
+        null,
+    ));
+    const blendModes = try this.allocator.alloc(c.XrEnvironmentBlendMode, count);
+    defer this.allocator.free(blendModes);
+    _ = try XrResult.init(c.xrEnumerateEnvironmentBlendModes(
+        this.instance,
+        this.systemId,
+        this.options.parsed.ViewConfigType,
+        count,
+        &count,
+        blendModes.ptr,
+    ));
+    const acceptableBlendModes = [_]c.XrEnvironmentBlendMode{
+        c.XR_ENVIRONMENT_BLEND_MODE_OPAQUE,
+        c.XR_ENVIRONMENT_BLEND_MODE_ADDITIVE,
+        c.XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND,
+    };
     for (blendModes) |blendMode| {
-        for (m_acceptableBlendModes) |mode| {
+        for (acceptableBlendModes) |mode| {
             if (blendMode == mode) {
                 return blendMode;
             }
         }
     }
-
     // THROW("No acceptable blend mode returned from the xrEnumerateEnvironmentBlendModes");
     return error.NoAcceptableBlendMode;
 }
 
-pub fn InitializeSystem() XrError!void {
-    std.debug.assert(m_instance != null);
-    std.debug.assert(m_systemId == c.XR_NULL_SYSTEM_ID);
-
-    const systemInfo: c.XrSystemGetInfo = .{
-        .type = c.XR_TYPE_SYSTEM_GET_INFO,
-        .formFactor = m_options.parsed.FormFactor,
-    };
-    _ = try XrResult.init(c.xrGetSystem(m_instance, &systemInfo, &m_systemId));
-
-    std.log.debug("Using system {} for form factor {}", .{
-        m_systemId,
-        m_options.parsed.FormFactor,
-    });
-    std.debug.assert(m_instance != null);
-    std.debug.assert(m_systemId != c.XR_NULL_SYSTEM_ID);
-}
-
-fn LogViewConfigurations(allocator: std.mem.Allocator) XrError!void {
-    std.debug.assert(m_instance != null);
-    std.debug.assert(m_systemId != c.XR_NULL_SYSTEM_ID);
-
+fn LogViewConfigurations(this: *@This()) XrError!void {
     var viewConfigTypeCount: u32 = undefined;
-    _ = try XrResult.init(c.xrEnumerateViewConfigurations(m_instance, m_systemId, 0, &viewConfigTypeCount, null));
-    const viewConfigTypes = try allocator.alloc(c.XrViewConfigurationType, viewConfigTypeCount);
-    defer allocator.free(viewConfigTypes);
-    _ = try XrResult.init(c.xrEnumerateViewConfigurations(m_instance, m_systemId, viewConfigTypeCount, &viewConfigTypeCount, viewConfigTypes.ptr));
+    _ = try XrResult.init(c.xrEnumerateViewConfigurations(
+        this.instance,
+        this.systemId,
+        0,
+        &viewConfigTypeCount,
+        null,
+    ));
+    const viewConfigTypes = try this.allocator.alloc(c.XrViewConfigurationType, viewConfigTypeCount);
+    defer this.allocator.free(viewConfigTypes);
+    _ = try XrResult.init(c.xrEnumerateViewConfigurations(
+        this.instance,
+        this.systemId,
+        viewConfigTypeCount,
+        &viewConfigTypeCount,
+        viewConfigTypes.ptr,
+    ));
     std.debug.assert(viewConfigTypes.len == viewConfigTypeCount);
 
     std.log.info("Available View Configuration Types: ({})", .{viewConfigTypeCount});
     for (viewConfigTypes) |viewConfigType| {
         std.log.debug("  View Configuration Type: {} {s}", .{
             viewConfigType,
-            if (viewConfigType == m_options.parsed.ViewConfigType) "(Selected)" else "",
+            if (viewConfigType == this.options.parsed.ViewConfigType) "(Selected)" else "",
         });
 
         var viewConfigProperties: c.XrViewConfigurationProperties = .{ .type = c.XR_TYPE_VIEW_CONFIGURATION_PROPERTIES };
-        _ = try XrResult.init(c.xrGetViewConfigurationProperties(m_instance, m_systemId, viewConfigType, &viewConfigProperties));
+        _ = try XrResult.init(c.xrGetViewConfigurationProperties(
+            this.instance,
+            this.systemId,
+            viewConfigType,
+            &viewConfigProperties,
+        ));
 
         std.log.debug("  View configuration FovMutable={s}", .{
             if (viewConfigProperties.fovMutable == c.XR_TRUE) "True" else "False",
         });
 
         var viewCount: u32 = undefined;
-        _ = try XrResult.init(c.xrEnumerateViewConfigurationViews(m_instance, m_systemId, viewConfigType, 0, &viewCount, null));
+        _ = try XrResult.init(c.xrEnumerateViewConfigurationViews(
+            this.instance,
+            this.systemId,
+            viewConfigType,
+            0,
+            &viewCount,
+            null,
+        ));
         if (viewCount > 0) {
-            const views = try allocator.alloc(c.XrViewConfigurationView, viewCount);
-            defer allocator.free(views);
+            const views = try this.allocator.alloc(c.XrViewConfigurationView, viewCount);
+            defer this.allocator.free(views);
             for (views) |*view| {
                 view.* = .{ .type = c.XR_TYPE_VIEW_CONFIGURATION_VIEW };
             }
-            _ = try XrResult.init(c.xrEnumerateViewConfigurationViews(m_instance, m_systemId, viewConfigType, viewCount, &viewCount, views.ptr));
+            _ = try XrResult.init(c.xrEnumerateViewConfigurationViews(
+                this.instance,
+                this.systemId,
+                viewConfigType,
+                viewCount,
+                &viewCount,
+                views.ptr,
+            ));
 
             for (views, 0..) |view, i| {
                 std.log.debug("    View [{}]: Recommended Width={} Height={} SampleCount={}", .{
@@ -326,26 +412,18 @@ fn LogViewConfigurations(allocator: std.mem.Allocator) XrError!void {
             std.log.err("Empty view configuration type", .{});
         }
 
-        try LogEnvironmentBlendMode(allocator, viewConfigType);
+        try this.LogEnvironmentBlendMode(viewConfigType);
     }
 }
 
-pub fn InitializeDevice(allocator: std.mem.Allocator) !void {
-    try LogViewConfigurations(allocator);
-
-    // The graphics API can initialize the graphics device now that the systemId and instance
-    // handle are available.
-    try gfx.InitializeDevice(m_instance, m_systemId);
-}
-
-fn LogReferenceSpaces(allocator: std.mem.Allocator) XrError!void {
-    std.debug.assert(m_session != null);
+fn LogReferenceSpaces(this: *@This()) XrError!void {
+    std.debug.assert(this.session != null);
 
     var spaceCount: u32 = undefined;
-    _ = try XrResult.init(c.xrEnumerateReferenceSpaces(m_session, 0, &spaceCount, null));
-    const spaces = try allocator.alloc(c.XrReferenceSpaceType, spaceCount);
-    defer allocator.free(spaces);
-    _ = try XrResult.init(c.xrEnumerateReferenceSpaces(m_session, spaceCount, &spaceCount, spaces.ptr));
+    _ = try XrResult.init(c.xrEnumerateReferenceSpaces(this.session, 0, &spaceCount, null));
+    const spaces = try this.allocator.alloc(c.XrReferenceSpaceType, spaceCount);
+    defer this.allocator.free(spaces);
+    _ = try XrResult.init(c.xrEnumerateReferenceSpaces(this.session, spaceCount, &spaceCount, spaces.ptr));
 
     std.log.info("Available reference spaces: {}", .{spaceCount});
     for (spaces) |space| {
@@ -353,9 +431,7 @@ fn LogReferenceSpaces(allocator: std.mem.Allocator) XrError!void {
     }
 }
 
-fn CreateVisualizedSpaces(allocator: std.mem.Allocator) !void {
-    std.debug.assert(m_session != null);
-
+fn CreateVisualizedSpaces(this: *@This()) !void {
     const visualizedSpaces = [_][]const u8{
         "ViewFront", "Local", "Stage", "StageLeft", "StageRight", "StageLeftRotated", "StageRightRotated",
     };
@@ -363,50 +439,19 @@ fn CreateVisualizedSpaces(allocator: std.mem.Allocator) !void {
     for (visualizedSpaces) |visualizedSpace| {
         const referenceSpaceCreateInfo = geometry.GetXrReferenceSpaceCreateInfo(visualizedSpace);
         var space: c.XrSpace = undefined;
-        const res = c.xrCreateReferenceSpace(m_session, &referenceSpaceCreateInfo, &space);
+        const res = c.xrCreateReferenceSpace(this.session, &referenceSpaceCreateInfo, &space);
         if (c.XR_SUCCEEDED(res)) {
-            try m_visualizedSpaces.append(allocator, space);
+            try this.visualizedSpaces.append(this.allocator, space);
         } else {
             std.log.warn("Failed to create reference space {s} with error {}", .{ visualizedSpace, res });
         }
     }
 }
 
-pub fn InitializeSession(allocator: std.mem.Allocator) XrError!c.XrSession {
-    std.debug.assert(m_instance != null);
-    std.debug.assert(m_session == null);
-
-    {
-        std.log.debug("Creating session...", .{});
-
-        var createInfo: c.XrSessionCreateInfo = .{
-            .type = c.XR_TYPE_SESSION_CREATE_INFO,
-            .next = gfx.GetGraphicsBinding(),
-            .systemId = m_systemId,
-        };
-        _ = try XrResult.init(c.xrCreateSession(m_instance, &createInfo, &m_session));
-    }
-
-    try LogReferenceSpaces(allocator);
-    try action.InitializeActions(m_instance, m_session);
-    try CreateVisualizedSpaces(allocator);
-
-    {
-        const referenceSpaceCreateInfo = geometry.GetXrReferenceSpaceCreateInfo(m_options.AppSpace.span());
-        _ = try XrResult.init(c.xrCreateReferenceSpace(m_session, &referenceSpaceCreateInfo, &m_appSpace));
-    }
-
-    return m_session;
-}
-
-pub fn CreateSwapchains(allocator: std.mem.Allocator) XrError!void {
-    std.debug.assert(m_session != null);
-    std.debug.assert(m_swapchains.items.len == 0);
-    std.debug.assert(m_configViews.items.len == 0);
-
+pub fn CreateSwapchains(this: *@This()) XrError!void {
     // Read graphics properties for preferred swapchain length and logging.
     var systemProperties: c.XrSystemProperties = .{ .type = c.XR_TYPE_SYSTEM_PROPERTIES };
-    _ = try XrResult.init(c.xrGetSystemProperties(m_instance, m_systemId, &systemProperties));
+    _ = try XrResult.init(c.xrGetSystemProperties(this.instance, this.systemId, &systemProperties));
 
     // Log system properties.
     std.log.info("System Properties: Name={s} VendorId={}", .{
@@ -425,27 +470,27 @@ pub fn CreateSwapchains(allocator: std.mem.Allocator) XrError!void {
     // Note: No other view configurations exist at the time this code was written. If this
     // condition is not met, the project will need to be audited to see how support should be
     // added.
-    std.debug.assert(m_options.parsed.ViewConfigType == c.XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO); //, "Unsupported view configuration type");
+    std.debug.assert(this.options.parsed.ViewConfigType == c.XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO); //, "Unsupported view configuration type");
 
     // Query and cache view configuration views.
     var viewCount: u32 = undefined;
-    _ = try XrResult.init(c.xrEnumerateViewConfigurationViews(m_instance, m_systemId, m_options.parsed.ViewConfigType, 0, &viewCount, null));
-    try m_configViews.resize(allocator, viewCount);
-    for (m_configViews.items) |*item| {
+    _ = try XrResult.init(c.xrEnumerateViewConfigurationViews(this.instance, this.systemId, this.options.parsed.ViewConfigType, 0, &viewCount, null));
+    try this.configViews.resize(this.allocator, viewCount);
+    for (this.configViews.items) |*item| {
         item.* = .{ .type = c.XR_TYPE_VIEW_CONFIGURATION_VIEW };
     }
     _ = try XrResult.init(c.xrEnumerateViewConfigurationViews(
-        m_instance,
-        m_systemId,
-        m_options.parsed.ViewConfigType,
+        this.instance,
+        this.systemId,
+        this.options.parsed.ViewConfigType,
         viewCount,
         &viewCount,
-        m_configViews.items.ptr,
+        this.configViews.items.ptr,
     ));
 
     // Create and cache view buffer for xrLocateViews later.
-    try m_views.resize(allocator, viewCount);
-    for (m_views.items) |*item| {
+    try this.views.resize(this.allocator, viewCount);
+    for (this.views.items) |*item| {
         item.* = .{ .type = c.XR_TYPE_VIEW };
     }
 
@@ -453,28 +498,28 @@ pub fn CreateSwapchains(allocator: std.mem.Allocator) XrError!void {
     if (viewCount > 0) {
         // Select a swapchain format.
         var swapchainFormatCount: u32 = undefined;
-        _ = try XrResult.init(c.xrEnumerateSwapchainFormats(m_session, 0, &swapchainFormatCount, null));
-        const swapchainFormats = try allocator.alloc(i64, swapchainFormatCount);
-        defer allocator.free(swapchainFormats);
+        _ = try XrResult.init(c.xrEnumerateSwapchainFormats(this.session, 0, &swapchainFormatCount, null));
+        const swapchainFormats = try this.allocator.alloc(i64, swapchainFormatCount);
+        defer this.allocator.free(swapchainFormats);
         _ = try XrResult.init(c.xrEnumerateSwapchainFormats(
-            m_session,
+            this.session,
             @intCast(swapchainFormats.len),
             &swapchainFormatCount,
             swapchainFormats.ptr,
         ));
         std.debug.assert(swapchainFormatCount == swapchainFormats.len);
-        m_colorSwapchainFormat = try gfx.SelectColorSwapchainFormat(allocator, swapchainFormats);
+        this.colorSwapchainFormat = try gfx.SelectColorSwapchainFormat(this.allocator, swapchainFormats);
 
         // Print swapchain formats and the selected one.
         {
             // const swapchainFormatsString: []const u8 = "";
-            var out = std.Io.Writer.Allocating.init(allocator);
+            var out = std.Io.Writer.Allocating.init(this.allocator);
             defer out.deinit();
             // std.io.Writer を値渡しすると壊れる
             var w: *std.io.Writer = &out.writer;
 
             for (swapchainFormats) |format| {
-                const selected = format == m_colorSwapchainFormat;
+                const selected = format == this.colorSwapchainFormat;
                 w.writeAll(" ") catch @panic("OOM");
                 if (selected) {
                     w.writeAll("[") catch @panic("OOM");
@@ -485,12 +530,12 @@ pub fn CreateSwapchains(allocator: std.mem.Allocator) XrError!void {
                 }
             }
             const str = out.toOwnedSlice() catch @panic("OOM");
-            defer allocator.free(str);
+            defer this.allocator.free(str);
             std.log.debug("Swapchain Formats: {s}", .{str});
         }
 
         // Create a swapchain for each view.
-        for (m_configViews.items, 0..) |vp, i| {
+        for (this.configViews.items, 0..) |vp, i| {
             std.log.info("Creating swapchain for view {} with dimensions Width={} Height={} SampleCount={}", .{
                 i,
                 vp.recommendedImageRectWidth,
@@ -502,7 +547,7 @@ pub fn CreateSwapchains(allocator: std.mem.Allocator) XrError!void {
             var swapchainCreateInfo: c.XrSwapchainCreateInfo = .{
                 .type = c.XR_TYPE_SWAPCHAIN_CREATE_INFO,
                 .arraySize = 1,
-                .format = m_colorSwapchainFormat,
+                .format = this.colorSwapchainFormat,
                 .width = vp.recommendedImageRectWidth,
                 .height = vp.recommendedImageRectHeight,
                 .mipCount = 1,
@@ -516,29 +561,29 @@ pub fn CreateSwapchains(allocator: std.mem.Allocator) XrError!void {
                 .width = swapchainCreateInfo.width,
                 .height = swapchainCreateInfo.height,
             };
-            _ = try XrResult.init(c.xrCreateSwapchain(m_session, &swapchainCreateInfo, &swapchain.handle));
+            _ = try XrResult.init(c.xrCreateSwapchain(this.session, &swapchainCreateInfo, &swapchain.handle));
 
-            try m_swapchains.append(allocator, swapchain);
+            try this.swapchains.append(this.allocator, swapchain);
 
             var imageCount: u32 = undefined;
             _ = try XrResult.init(c.xrEnumerateSwapchainImages(swapchain.handle, 0, &imageCount, null));
             // XXX This should really just return XrSwapchainImageBaseHeader*
-            const swapchainImages = try allocator.alloc(*c.XrSwapchainImageBaseHeader, imageCount);
-            try gfx.AllocateSwapchainImageStructs(allocator, swapchainImages);
+            const swapchainImages = try this.allocator.alloc(*c.XrSwapchainImageBaseHeader, imageCount);
+            try gfx.AllocateSwapchainImageStructs(this.allocator, swapchainImages);
             _ = try XrResult.init(c.xrEnumerateSwapchainImages(swapchain.handle, imageCount, &imageCount, swapchainImages[0]));
 
-            try m_swapchainImages.put(swapchain.handle, swapchainImages);
+            try this.swapchainImages.put(swapchain.handle, swapchainImages);
         }
     }
 }
 
 // Return event if one is available, otherwise return null.
-pub fn TryReadNextEvent() ?*c.XrEventDataBaseHeader {
+pub fn TryReadNextEvent(this: *@This()) ?*c.XrEventDataBaseHeader {
     // It is sufficient to clear the just the XrEventDataBuffer header to
     // XR_TYPE_EVENT_DATA_BUFFER
-    const baseHeader: *c.XrEventDataBaseHeader = @ptrCast(&m_eventDataBuffer);
+    const baseHeader: *c.XrEventDataBaseHeader = @ptrCast(&this.eventDataBuffer);
     baseHeader.* = .{ .type = c.XR_TYPE_EVENT_DATA_BUFFER };
-    const xr = c.xrPollEvent(m_instance, &m_eventDataBuffer);
+    const xr = c.xrPollEvent(this.instance, &this.eventDataBuffer);
     if (xr == c.XR_SUCCESS) {
         if (baseHeader.type == c.XR_TYPE_EVENT_DATA_EVENTS_LOST) {
             const eventsLost: *c.XrEventDataEventsLost = @ptrCast(baseHeader);
@@ -559,40 +604,41 @@ pub const SessionNext = enum {
 };
 
 fn HandleSessionStateChangedEvent(
+    this: *@This(),
     stateChangedEvent: *c.XrEventDataSessionStateChanged,
     // exitRenderLoop: *bool,
     // requestRestart: *bool,
 ) XrError!SessionNext {
-    const oldState = m_sessionState;
-    m_sessionState = stateChangedEvent.state;
+    const oldState = this.sessionState;
+    this.sessionState = stateChangedEvent.state;
 
     std.log.info("XrEventDataSessionStateChanged: state {}->{} session={?} time={}", .{
         oldState,
-        m_sessionState,
+        this.sessionState,
         stateChangedEvent.session,
         stateChangedEvent.time,
     });
 
-    if ((stateChangedEvent.session != null) and (stateChangedEvent.session != m_session)) {
+    if ((stateChangedEvent.session != null) and (stateChangedEvent.session != this.session)) {
         std.log.err("XrEventDataSessionStateChanged for unknown session", .{});
         return .next;
     }
 
-    switch (m_sessionState) {
+    switch (this.sessionState) {
         c.XR_SESSION_STATE_READY => {
-            std.debug.assert(m_session != null);
+            std.debug.assert(this.session != null);
             var sessionBeginInfo: c.XrSessionBeginInfo = .{
                 .type = c.XR_TYPE_SESSION_BEGIN_INFO,
             };
-            sessionBeginInfo.primaryViewConfigurationType = m_options.parsed.ViewConfigType;
-            _ = try XrResult.init(c.xrBeginSession(m_session, &sessionBeginInfo));
-            m_sessionRunning = true;
+            sessionBeginInfo.primaryViewConfigurationType = this.options.parsed.ViewConfigType;
+            _ = try XrResult.init(c.xrBeginSession(this.session, &sessionBeginInfo));
+            this.sessionRunning = true;
             return .next;
         },
         c.XR_SESSION_STATE_STOPPING => {
-            std.debug.assert(m_session != null);
-            m_sessionRunning = false;
-            _ = try XrResult.init(c.xrEndSession(m_session));
+            std.debug.assert(this.session != null);
+            this.sessionRunning = false;
+            _ = try XrResult.init(c.xrEndSession(this.session));
             return .next;
         },
         c.XR_SESSION_STATE_EXITING => {
@@ -614,10 +660,10 @@ pub const EventNext = enum {
 };
 
 pub fn PollEvents(
-    allocator: std.mem.Allocator,
+    this: *@This(),
 ) !EventNext {
     // Process all pending messages.
-    while (TryReadNextEvent()) |event| {
+    while (this.TryReadNextEvent()) |event| {
         switch (event.type) {
             c.XR_TYPE_EVENT_DATA_INSTANCE_LOSS_PENDING => {
                 // https://registry.khronos.org/OpenXR/specs/1.0/man/html/XrEventDataInstanceLossPending.html
@@ -627,7 +673,7 @@ pub fn PollEvents(
             },
             c.XR_TYPE_EVENT_DATA_SESSION_STATE_CHANGED => {
                 const sessionStateChangedEvent: *c.XrEventDataSessionStateChanged = @ptrCast(event);
-                switch (try HandleSessionStateChangedEvent(sessionStateChangedEvent)) {
+                switch (try this.HandleSessionStateChangedEvent(sessionStateChangedEvent)) {
                     .next => {},
                     .quit => {
                         return .quit;
@@ -638,7 +684,7 @@ pub fn PollEvents(
                 }
             },
             c.XR_TYPE_EVENT_DATA_INTERACTION_PROFILE_CHANGED => {
-                try action.LogEvent(allocator, m_session);
+                try action.LogEvent(this.allocator, this.session);
             },
             // case XR_TYPE_EVENT_DATA_REFERENCE_SPACE_CHANGE_PENDING:
             else => {
@@ -649,35 +695,35 @@ pub fn PollEvents(
     return .render;
 }
 
-pub fn IsSessionRunning() bool {
-    return m_sessionRunning;
+pub fn IsSessionRunning(this: *@This()) bool {
+    return this.sessionRunning;
 }
 
-pub fn IsSessionFocused() bool {
-    return m_sessionState == c.XR_SESSION_STATE_FOCUSED;
+pub fn IsSessionFocused(this: *@This()) bool {
+    return this.m_sessionState == c.XR_SESSION_STATE_FOCUSED;
 }
 
 pub fn RenderLayer(
-    allocator: std.mem.Allocator,
+    this: *@This(),
     predictedDisplayTime: c.XrTime,
 ) !*c.XrCompositionLayerBaseHeader {
     // std.debug.assert(viewCountOutput == viewCapacityInput);
     // std.debug.assert(viewCountOutput == m_configViews.items.len);
     // std.debug.assert(viewCountOutput == m_swapchains.items.len);
 
-    try m_projectionLayerViews.resize(allocator, m_views.items.len);
+    try this.projectionLayerViews.resize(this.allocator, this.views.items.len);
 
     // For each locatable space that we want to visualize, render a 25cm cube.
     var cubes: std.ArrayList(Cube) = .{};
-    defer cubes.deinit(allocator);
-    for (m_visualizedSpaces.items) |visualizedSpace| {
+    defer cubes.deinit(this.allocator);
+    for (this.visualizedSpaces.items) |visualizedSpace| {
         var spaceLocation: c.XrSpaceLocation = .{ .type = c.XR_TYPE_SPACE_LOCATION };
-        const res = try XrResult.init(c.xrLocateSpace(visualizedSpace, m_appSpace, predictedDisplayTime, &spaceLocation));
+        const res = try XrResult.init(c.xrLocateSpace(visualizedSpace, this.appSpace, predictedDisplayTime, &spaceLocation));
         if (res == .Success) {
             if ((spaceLocation.locationFlags & c.XR_SPACE_LOCATION_POSITION_VALID_BIT) != 0 and
                 (spaceLocation.locationFlags & c.XR_SPACE_LOCATION_ORIENTATION_VALID_BIT) != 0)
             {
-                try cubes.append(allocator, .init(spaceLocation.pose, .{ .x = 0.25, .y = 0.25, .z = 0.25 }));
+                try cubes.append(this.allocator, .init(spaceLocation.pose, .{ .x = 0.25, .y = 0.25, .z = 0.25 }));
             }
         } else {
             std.log.debug("Unable to locate a visualized reference space in app space: {}", .{res});
@@ -689,13 +735,13 @@ pub fn RenderLayer(
     const hands = [2]usize{ action.Side.LEFT, action.Side.RIGHT };
     for (hands) |hand| {
         var spaceLocation: c.XrSpaceLocation = .{ .type = c.XR_TYPE_SPACE_LOCATION };
-        const res = try XrResult.init(c.xrLocateSpace(action.m_input.handSpace[hand], m_appSpace, predictedDisplayTime, &spaceLocation));
+        const res = try XrResult.init(c.xrLocateSpace(action.m_input.handSpace[hand], this.appSpace, predictedDisplayTime, &spaceLocation));
         if (res == .Success) {
             if ((spaceLocation.locationFlags & c.XR_SPACE_LOCATION_POSITION_VALID_BIT) != 0 and
                 (spaceLocation.locationFlags & c.XR_SPACE_LOCATION_ORIENTATION_VALID_BIT) != 0)
             {
                 const scale = 0.1 * action.m_input.handScale[hand];
-                try cubes.append(allocator, .init(spaceLocation.pose, .{ .x = scale, .y = scale, .z = scale }));
+                try cubes.append(this.allocator, .init(spaceLocation.pose, .{ .x = scale, .y = scale, .z = scale }));
             }
         } else {
             // Tracking loss is expected when the hand is not active so only log a message
@@ -708,7 +754,7 @@ pub fn RenderLayer(
     }
 
     // Render view to the appropriate part of the swapchain image.
-    for (m_swapchains.items, 0..) |viewSwapchain, i| {
+    for (this.swapchains.items, 0..) |viewSwapchain, i| {
         // Each view has a separate swapchain which is acquired, rendered to, and released.
         var acquireInfo: c.XrSwapchainImageAcquireInfo = .{ .type = c.XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO };
         var swapchainImageIndex: u32 = undefined;
@@ -720,10 +766,10 @@ pub fn RenderLayer(
         };
         _ = try XrResult.init(c.xrWaitSwapchainImage(viewSwapchain.handle, &waitInfo));
 
-        m_projectionLayerViews.items[i] = .{
+        this.projectionLayerViews.items[i] = .{
             .type = c.XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW,
-            .pose = m_views.items[i].pose,
-            .fov = m_views.items[i].fov,
+            .pose = this.views.items[i].pose,
+            .fov = this.views.items[i].fov,
             .subImage = .{
                 .swapchain = viewSwapchain.handle,
                 .imageRect = .{
@@ -733,61 +779,74 @@ pub fn RenderLayer(
             },
         };
 
-        const entry = m_swapchainImages.get(viewSwapchain.handle).?;
+        const entry = this.swapchainImages.get(viewSwapchain.handle).?;
         const swapchainImage: *c.XrSwapchainImageBaseHeader = entry[swapchainImageIndex];
-        try gfx.RenderView(&m_projectionLayerViews.items[i], swapchainImage, m_colorSwapchainFormat, cubes.items);
+        try gfx.RenderView(
+            &this.projectionLayerViews.items[i],
+            swapchainImage,
+            this.colorSwapchainFormat,
+            Options.GetBackgroundClearColor(try this.GetPreferredBlendMode()),
+            cubes.items,
+        );
 
         var releaseInfo: c.XrSwapchainImageReleaseInfo = .{ .type = c.XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO };
         _ = try XrResult.init(c.xrReleaseSwapchainImage(viewSwapchain.handle, &releaseInfo));
     }
 
-    m_layer = .{
+    this.layer = .{
         .type = c.XR_TYPE_COMPOSITION_LAYER_PROJECTION,
-        .space = m_appSpace,
-        .layerFlags = if (m_options.parsed.EnvironmentBlendMode == c.XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND)
+        .space = this.appSpace,
+        .layerFlags = if (try this.GetPreferredBlendMode() == c.XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND)
             c.XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT | c.XR_COMPOSITION_LAYER_UNPREMULTIPLIED_ALPHA_BIT
         else
             0,
-        .viewCount = @intCast(m_projectionLayerViews.items.len),
-        .views = m_projectionLayerViews.items.ptr,
+        .viewCount = @intCast(this.projectionLayerViews.items.len),
+        .views = this.projectionLayerViews.items.ptr,
     };
-    return @ptrCast(&m_layer);
+    return @ptrCast(&this.layer);
 }
 
-pub fn endFrame(predictedDisplayTime: c.XrTime, maybe_layer: ?*c.XrCompositionLayerBaseHeader) !void {
+pub fn endFrame(this: *@This(), predictedDisplayTime: c.XrTime, maybe_layer: ?*c.XrCompositionLayerBaseHeader) !void {
     var frameEndInfo: c.XrFrameEndInfo = .{
         .type = c.XR_TYPE_FRAME_END_INFO,
         .displayTime = predictedDisplayTime,
-        .environmentBlendMode = m_options.parsed.EnvironmentBlendMode,
+        .environmentBlendMode = try this.GetPreferredBlendMode(),
         .layerCount = if (maybe_layer != null) 1 else 0,
         .layers = if (maybe_layer) |layer| &layer else null,
     };
-    _ = try XrResult.init(c.xrEndFrame(m_session, &frameEndInfo));
+    _ = try XrResult.init(c.xrEndFrame(this.session, &frameEndInfo));
 }
 
-pub fn beginFrame() !c.XrFrameState {
+pub fn beginFrame(this: @This()) !c.XrFrameState {
     var frameWaitInfo: c.XrFrameWaitInfo = .{ .type = c.XR_TYPE_FRAME_WAIT_INFO };
     var frameState: c.XrFrameState = .{ .type = c.XR_TYPE_FRAME_STATE };
-    _ = try XrResult.init(c.xrWaitFrame(m_session, &frameWaitInfo, &frameState));
+    _ = try XrResult.init(c.xrWaitFrame(this.session, &frameWaitInfo, &frameState));
 
     var frameBeginInfo: c.XrFrameBeginInfo = .{ .type = c.XR_TYPE_FRAME_BEGIN_INFO };
-    _ = try XrResult.init(c.xrBeginFrame(m_session, &frameBeginInfo));
+    _ = try XrResult.init(c.xrBeginFrame(this.session, &frameBeginInfo));
 
     return frameState;
 }
 
-pub fn locate(predictedDisplayTime: c.XrTime) !bool {
+pub fn locate(this: *@This(), predictedDisplayTime: c.XrTime) !bool {
     var viewState: c.XrViewState = .{ .type = c.XR_TYPE_VIEW_STATE };
-    const viewCapacityInput: u32 = @intCast(m_views.items.len);
+    const viewCapacityInput: u32 = @intCast(this.views.items.len);
     var viewCountOutput: u32 = undefined;
     var viewLocateInfo: c.XrViewLocateInfo = .{
         .type = c.XR_TYPE_VIEW_LOCATE_INFO,
-        .viewConfigurationType = m_options.parsed.ViewConfigType,
+        .viewConfigurationType = this.options.parsed.ViewConfigType,
         .displayTime = predictedDisplayTime,
-        .space = m_appSpace,
+        .space = this.appSpace,
     };
 
-    _ = try XrResult.init(c.xrLocateViews(m_session, &viewLocateInfo, &viewState, viewCapacityInput, &viewCountOutput, m_views.items.ptr));
+    _ = try XrResult.init(c.xrLocateViews(
+        this.session,
+        &viewLocateInfo,
+        &viewState,
+        viewCapacityInput,
+        &viewCountOutput,
+        this.views.items.ptr,
+    ));
     if ((viewState.viewStateFlags & c.XR_VIEW_STATE_POSITION_VALID_BIT) == 0 or
         (viewState.viewStateFlags & c.XR_VIEW_STATE_ORIENTATION_VALID_BIT) == 0)
     {
@@ -796,3 +855,9 @@ pub fn locate(predictedDisplayTime: c.XrTime) !bool {
         return true;
     }
 }
+
+const NextFrame = enum {
+    next,
+    quit,
+    restart,
+};

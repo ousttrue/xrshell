@@ -58,11 +58,9 @@ var m_cubeIndexBuffer: c.GLuint = 0;
 
 // Map color buffer to associated depth buffer. This map is populated on demand.
 var m_colorToDepthMap: std.AutoHashMap(u32, u32) = undefined;
-var m_clearColor: [4]f32 = undefined;
 
-pub fn init(allocator: std.mem.Allocator, options: *Options) void {
+pub fn init(allocator: std.mem.Allocator) void {
     std.log.info("GFX => OpenGL", .{});
-    m_clearColor = options.GetBackgroundClearColor();
     m_colorToDepthMap = .init(allocator);
 }
 
@@ -299,6 +297,7 @@ pub fn RenderView(
     layerView: *const c.XrCompositionLayerProjectionView,
     swapchainImage: *const c.XrSwapchainImageBaseHeader,
     swapchainFormat: i64,
+    clear_color: [4]f32,
     cubes: []Cube,
 ) !void {
     _ = swapchainFormat;
@@ -326,7 +325,7 @@ pub fn RenderView(
     c.glFramebufferTexture2D(c.GL_FRAMEBUFFER, c.GL_DEPTH_ATTACHMENT, c.GL_TEXTURE_2D, depthTexture, 0);
 
     // Clear swapchain and depth buffer.
-    c.glClearColor(m_clearColor[0], m_clearColor[1], m_clearColor[2], m_clearColor[3]);
+    c.glClearColor(clear_color[0], clear_color[1], clear_color[2], clear_color[3]);
     c.glClearDepth(1.0);
     c.glClear(c.GL_COLOR_BUFFER_BIT | c.GL_DEPTH_BUFFER_BIT | c.GL_STENCIL_BUFFER_BIT);
 

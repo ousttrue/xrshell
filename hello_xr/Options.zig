@@ -1,19 +1,24 @@
 const std = @import("std");
 const c = @import("c");
 const Options = @This();
+const Parsed = extern struct {
+    FormFactor: c.XrFormFactor = c.XR_FORM_FACTOR_HEAD_MOUNTED_DISPLAY,
+    ViewConfigType: c.XrViewConfigurationType = c.XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO,
+    // EnvironmentBlendMode: c.XrEnvironmentBlendMode = c.XR_ENVIRONMENT_BLEND_MODE_OPAQUE,
+};
 
 GraphicsPlugin: FixedString = .init(""),
 FormFactor: FixedString = .init("Hmd"),
 ViewConfiguration: FixedString = .init("Stereo"),
-EnvironmentBlendMode: FixedString = .init("Opaque"),
+// EnvironmentBlendMode: FixedString = .init("Opaque"),
 AppSpace: FixedString = .init("Local"),
 parsed: Parsed = .{},
 
-pub fn GetBackgroundClearColor(this: @This()) [4]f32 {
+pub fn GetBackgroundClearColor(environmentBlendMode: c.XrEnvironmentBlendMode) [4]f32 {
     const SlateGrey = [4]f32{ 0.184313729, 0.309803933, 0.309803933, 1.0 };
     const TransparentBlack = [4]f32{ 0.0, 0.0, 0.0, 0.0 };
     const Black = [4]f32{ 0.0, 0.0, 0.0, 1.0 };
-    return switch (this.parsed.EnvironmentBlendMode) {
+    return switch (environmentBlendMode) {
         c.XR_ENVIRONMENT_BLEND_MODE_OPAQUE => SlateGrey,
         c.XR_ENVIRONMENT_BLEND_MODE_ADDITIVE => Black,
         c.XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND => TransparentBlack,
@@ -24,7 +29,7 @@ pub fn GetBackgroundClearColor(this: @This()) [4]f32 {
 pub fn ParseStrings(this: *@This()) !void {
     this.parsed.FormFactor = try GetXrFormFactor(this.FormFactor);
     this.parsed.ViewConfigType = try GetXrViewConfigurationType(this.ViewConfiguration);
-    this.parsed.EnvironmentBlendMode = try GetXrEnvironmentBlendMode(this.EnvironmentBlendMode);
+    // this.parsed.EnvironmentBlendMode = try GetXrEnvironmentBlendMode(this.EnvironmentBlendMode);
 }
 
 fn GetXrFormFactor(formFactorStr: FixedString) !c.XrFormFactor {
@@ -93,12 +98,6 @@ fn GetXrEnvironmentBlendModeStr(environmentBlendMode: c.XrEnvironmentBlendMode) 
     };
 }
 
-const Parsed = extern struct {
-    FormFactor: c.XrFormFactor = c.XR_FORM_FACTOR_HEAD_MOUNTED_DISPLAY,
-    ViewConfigType: c.XrViewConfigurationType = c.XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO,
-    EnvironmentBlendMode: c.XrEnvironmentBlendMode = c.XR_ENVIRONMENT_BLEND_MODE_OPAQUE,
-};
-
 fn ShowHelp() void {
     // TODO: Improve/update when things are more settled.
     std.log.info("HelloXr --graphics|-g <Graphics API> [--formfactor|-ff <Form factor>] [--viewconfig|-vc <View config>] " ++
@@ -110,10 +109,10 @@ fn ShowHelp() void {
     std.log.info("Spaces:                   View, Local, Stage", .{});
 }
 
-pub fn SetEnvironmentBlendMode(this: *@This(), environmentBlendMode: c.XrEnvironmentBlendMode) void {
-    this.EnvironmentBlendMode = GetXrEnvironmentBlendModeStr(environmentBlendMode);
-    this.parsed.EnvironmentBlendMode = environmentBlendMode;
-}
+// pub fn SetEnvironmentBlendMode(this: *@This(), environmentBlendMode: c.XrEnvironmentBlendMode) void {
+//     this.EnvironmentBlendMode = GetXrEnvironmentBlendModeStr(environmentBlendMode);
+//     this.parsed.EnvironmentBlendMode = environmentBlendMode;
+// }
 
 const Parser = struct {
     options: *Options,
@@ -138,9 +137,11 @@ const Parser = struct {
                 this.options.FormFactor = .init(this.getNextArg());
             } else if (std.ascii.eqlIgnoreCase(arg, "--viewconfig") or std.ascii.eqlIgnoreCase(arg, "-vc")) {
                 this.options.ViewConfiguration = .init(this.getNextArg());
-            } else if (std.ascii.eqlIgnoreCase(arg, "--blendmode") or std.ascii.eqlIgnoreCase(arg, "-bm")) {
-                this.options.EnvironmentBlendMode = .init(this.getNextArg());
-            } else if (std.ascii.eqlIgnoreCase(arg, "--space") or std.ascii.eqlIgnoreCase(arg, "-s")) {
+            } 
+            // else if (std.ascii.eqlIgnoreCase(arg, "--blendmode") or std.ascii.eqlIgnoreCase(arg, "-bm")) {
+            //     this.options.EnvironmentBlendMode = .init(this.getNextArg());
+            // } 
+            else if (std.ascii.eqlIgnoreCase(arg, "--space") or std.ascii.eqlIgnoreCase(arg, "-s")) {
                 this.options.AppSpace = .init(this.getNextArg());
             } else if (std.ascii.eqlIgnoreCase(arg, "--verbose") or std.ascii.eqlIgnoreCase(arg, "-v")) {
                 // Log::SetLevel(Log::Level::Verbose);
