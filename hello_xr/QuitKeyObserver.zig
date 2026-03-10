@@ -15,7 +15,7 @@ pub fn spawn(this: *@This()) !void {
 }
 
 pub fn gets(this: *@This()) void {
-    std.log.info("Press any key to shutdown...", .{});
+    std.log.info("[QuitKeyObserver] Press [enter] to shutdown...", .{});
     var buf: [1]u8 = undefined;
     var r = std.fs.File.stdin().reader(&buf);
     var tmp: [1]u8 = undefined;

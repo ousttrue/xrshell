@@ -113,176 +113,22 @@ fn logExtensions(allocator: std.mem.Allocator, _layerName: []const u8, indent: u
 
 var version_str: [64]u8 = undefined;
 
-fn LogEnvironmentBlendMode(this: *@This(), _type: c.XrViewConfigurationType) XrError!void {
-    var count: u32 = undefined;
-    _ = try XrResult.init(c.xrEnumerateEnvironmentBlendModes(this.instance, this.systemId, _type, 0, &count, null));
-    std.debug.assert(count > 0);
-
-    std.log.info("Available Environment Blend Mode count : ({})", .{count});
-
-    const blendModes = try this.allocator.alloc(c.XrEnvironmentBlendMode, count);
-    defer this.allocator.free(blendModes);
-    _ = try XrResult.init(c.xrEnumerateEnvironmentBlendModes(this.instance, this.systemId, _type, count, &count, blendModes.ptr));
-
-    var blendModeFound = false;
-    for (blendModes) |mode| {
-        const blendModeMatch = (mode == this.GetPreferredBlendMode() catch @panic("OOM"));
-        std.log.info("Environment Blend Mode ({}) : {s}", .{ mode, if (blendModeMatch) "(Selected)" else "" });
-        blendModeFound |= blendModeMatch;
-    }
-    std.debug.assert(blendModeFound);
-}
-
-pub fn GetPreferredBlendMode(this: *@This()) !c.XrEnvironmentBlendMode {
-    var count: u32 = undefined;
-    _ = try XrResult.init(c.xrEnumerateEnvironmentBlendModes(
-        this.instance,
-        this.systemId,
-        this.options.parsed.ViewConfigType,
-        0,
-        &count,
-        null,
-    ));
-    const blendModes = try this.allocator.alloc(c.XrEnvironmentBlendMode, count);
-    defer this.allocator.free(blendModes);
-    _ = try XrResult.init(c.xrEnumerateEnvironmentBlendModes(
-        this.instance,
-        this.systemId,
-        this.options.parsed.ViewConfigType,
-        count,
-        &count,
-        blendModes.ptr,
-    ));
-    const acceptableBlendModes = [_]c.XrEnvironmentBlendMode{
-        c.XR_ENVIRONMENT_BLEND_MODE_OPAQUE,
-        c.XR_ENVIRONMENT_BLEND_MODE_ADDITIVE,
-        c.XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND,
-    };
-    for (blendModes) |blendMode| {
-        for (acceptableBlendModes) |mode| {
-            if (blendMode == mode) {
-                return blendMode;
-            }
-        }
-    }
-    // THROW("No acceptable blend mode returned from the xrEnumerateEnvironmentBlendModes");
-    return error.NoAcceptableBlendMode;
-}
-
-pub fn LogViewConfigurations(this: *@This()) XrError!void {
-    var viewConfigTypeCount: u32 = undefined;
-    _ = try XrResult.init(c.xrEnumerateViewConfigurations(
-        this.instance,
-        this.systemId,
-        0,
-        &viewConfigTypeCount,
-        null,
-    ));
-    const viewConfigTypes = try this.allocator.alloc(c.XrViewConfigurationType, viewConfigTypeCount);
-    defer this.allocator.free(viewConfigTypes);
-    _ = try XrResult.init(c.xrEnumerateViewConfigurations(
-        this.instance,
-        this.systemId,
-        viewConfigTypeCount,
-        &viewConfigTypeCount,
-        viewConfigTypes.ptr,
-    ));
-    std.debug.assert(viewConfigTypes.len == viewConfigTypeCount);
-
-    std.log.info("Available View Configuration Types: ({})", .{viewConfigTypeCount});
-    for (viewConfigTypes) |viewConfigType| {
-        std.log.debug("  View Configuration Type: {} {s}", .{
-            viewConfigType,
-            if (viewConfigType == this.options.parsed.ViewConfigType) "(Selected)" else "",
-        });
-
-        var viewConfigProperties: c.XrViewConfigurationProperties = .{ .type = c.XR_TYPE_VIEW_CONFIGURATION_PROPERTIES };
-        _ = try XrResult.init(c.xrGetViewConfigurationProperties(
-            this.instance,
-            this.systemId,
-            viewConfigType,
-            &viewConfigProperties,
-        ));
-
-        std.log.debug("  View configuration FovMutable={s}", .{
-            if (viewConfigProperties.fovMutable == c.XR_TRUE) "True" else "False",
-        });
-
-        var viewCount: u32 = undefined;
-        _ = try XrResult.init(c.xrEnumerateViewConfigurationViews(
-            this.instance,
-            this.systemId,
-            viewConfigType,
-            0,
-            &viewCount,
-            null,
-        ));
-        if (viewCount > 0) {
-            const views = try this.allocator.alloc(c.XrViewConfigurationView, viewCount);
-            defer this.allocator.free(views);
-            for (views) |*view| {
-                view.* = .{ .type = c.XR_TYPE_VIEW_CONFIGURATION_VIEW };
-            }
-            _ = try XrResult.init(c.xrEnumerateViewConfigurationViews(
-                this.instance,
-                this.systemId,
-                viewConfigType,
-                viewCount,
-                &viewCount,
-                views.ptr,
-            ));
-
-            for (views, 0..) |view, i| {
-                std.log.debug("    View [{}]: Recommended Width={} Height={} SampleCount={}", .{
-                    i,                               view.recommendedImageRectWidth,
-                    view.recommendedImageRectHeight, view.recommendedSwapchainSampleCount,
-                });
-                std.log.debug("    View [{}]:     Maximum Width={} Height={} SampleCount={}", .{
-                    i,
-                    view.maxImageRectWidth,
-                    view.maxImageRectHeight,
-                    view.maxSwapchainSampleCount,
-                });
-            }
-        } else {
-            std.log.err("Empty view configuration type", .{});
-        }
-
-        try this.LogEnvironmentBlendMode(viewConfigType);
-    }
-}
-
-pub fn LogReferenceSpaces(this: *@This()) XrError!void {
-    std.debug.assert(this.session != null);
-
-    var spaceCount: u32 = undefined;
-    _ = try XrResult.init(c.xrEnumerateReferenceSpaces(this.session, 0, &spaceCount, null));
-    const spaces = try this.allocator.alloc(c.XrReferenceSpaceType, spaceCount);
-    defer this.allocator.free(spaces);
-    _ = try XrResult.init(c.xrEnumerateReferenceSpaces(this.session, spaceCount, &spaceCount, spaces.ptr));
-
-    std.log.info("Available reference spaces: {}", .{spaceCount});
-    for (spaces) |space| {
-        std.log.debug("  Name: {}", .{space});
-    }
-}
-
 pub fn CreateSwapchains(this: *@This()) XrError!void {
     // Read graphics properties for preferred swapchain length and logging.
     var systemProperties: c.XrSystemProperties = .{ .type = c.XR_TYPE_SYSTEM_PROPERTIES };
     _ = try XrResult.init(c.xrGetSystemProperties(this.instance, this.systemId, &systemProperties));
 
     // Log system properties.
-    std.log.info("System Properties: Name={s} VendorId={}", .{
+    std.log.debug("System Properties: Name={s} VendorId={}", .{
         systemProperties.systemName,
         systemProperties.vendorId,
     });
-    std.log.info("System Graphics Properties: MaxWidth={} MaxHeight={} MaxLayers={}", .{
+    std.log.debug("System Graphics Properties: MaxWidth={} MaxHeight={} MaxLayers={}", .{
         systemProperties.graphicsProperties.maxSwapchainImageWidth,
         systemProperties.graphicsProperties.maxSwapchainImageHeight,
         systemProperties.graphicsProperties.maxLayerCount,
     });
-    std.log.info("System Tracking Properties: OrientationTracking={s} PositionTracking={s}", .{
+    std.log.debug("System Tracking Properties: OrientationTracking={s} PositionTracking={s}", .{
         if (systemProperties.trackingProperties.orientationTracking == c.XR_TRUE) "True" else "False",
         if (systemProperties.trackingProperties.positionTracking == c.XR_TRUE) "True" else "False",
     });
@@ -355,7 +201,7 @@ pub fn CreateSwapchains(this: *@This()) XrError!void {
 
         // Create a swapchain for each view.
         for (this.configViews.items, 0..) |vp, i| {
-            std.log.info("Creating swapchain for view {} with dimensions Width={} Height={} SampleCount={}", .{
+            std.log.debug("Creating swapchain for view {} with dimensions Width={} Height={} SampleCount={}", .{
                 i,
                 vp.recommendedImageRectWidth,
                 vp.recommendedImageRectHeight,
@@ -398,6 +244,7 @@ pub fn CreateSwapchains(this: *@This()) XrError!void {
 
 pub fn renderLayer(
     this: *@This(),
+    blend_mode: c.XrEnvironmentBlendMode,
     cubes: []const Cube,
 ) !*c.XrCompositionLayerBaseHeader {
     // std.debug.assert(viewCountOutput == viewCapacityInput);
@@ -438,7 +285,7 @@ pub fn renderLayer(
             &this.projectionLayerViews.items[i],
             swapchainImage,
             this.colorSwapchainFormat,
-            Options.GetBackgroundClearColor(try this.GetPreferredBlendMode()),
+            Options.GetBackgroundClearColor(blend_mode),
             cubes,
         );
 
@@ -449,7 +296,7 @@ pub fn renderLayer(
     this.layer = .{
         .type = c.XR_TYPE_COMPOSITION_LAYER_PROJECTION,
         .space = this.appSpace,
-        .layerFlags = if (try this.GetPreferredBlendMode() == c.XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND)
+        .layerFlags = if (blend_mode == c.XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND)
             c.XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT | c.XR_COMPOSITION_LAYER_UNPREMULTIPLIED_ALPHA_BIT
         else
             0,
@@ -459,11 +306,16 @@ pub fn renderLayer(
     return @ptrCast(&this.layer);
 }
 
-pub fn endFrame(this: *@This(), predictedDisplayTime: c.XrTime, maybe_layer: ?*c.XrCompositionLayerBaseHeader) !void {
+pub fn endFrame(
+    this: *@This(),
+    predictedDisplayTime: c.XrTime,
+    blend_mode: c.XrEnvironmentBlendMode,
+    maybe_layer: ?*c.XrCompositionLayerBaseHeader,
+) !void {
     var frameEndInfo: c.XrFrameEndInfo = .{
         .type = c.XR_TYPE_FRAME_END_INFO,
         .displayTime = predictedDisplayTime,
-        .environmentBlendMode = try this.GetPreferredBlendMode(),
+        .environmentBlendMode = blend_mode,
         .layerCount = if (maybe_layer != null) 1 else 0,
         .layers = if (maybe_layer) |layer| &layer else null,
     };

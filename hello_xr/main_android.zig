@@ -87,36 +87,36 @@ export fn app_handle_cmd(app: [*c]c.android_app, cmd: c_int) void {
         // application thread from onCreate(). The application thread
         // then calls android_main().
         c.APP_CMD_START => {
-            std.log.info("    APP_CMD_START", .{});
-            std.log.info("onStart()", .{});
+            std.log.debug("    APP_CMD_START", .{});
+            std.log.debug("onStart()", .{});
         },
         c.APP_CMD_RESUME => {
-            std.log.info("onResume()", .{});
-            std.log.info("    APP_CMD_RESUME", .{});
+            std.log.debug("onResume()", .{});
+            std.log.debug("    APP_CMD_RESUME", .{});
             appState.Resumed = true;
         },
         c.APP_CMD_PAUSE => {
-            std.log.info("onPause()", .{});
-            std.log.info("    APP_CMD_PAUSE", .{});
+            std.log.debug("onPause()", .{});
+            std.log.debug("    APP_CMD_PAUSE", .{});
             appState.Resumed = false;
         },
         c.APP_CMD_STOP => {
-            std.log.info("onStop()", .{});
-            std.log.info("    APP_CMD_STOP", .{});
+            std.log.debug("onStop()", .{});
+            std.log.debug("    APP_CMD_STOP", .{});
         },
         c.APP_CMD_DESTROY => {
-            std.log.info("onDestroy()", .{});
-            std.log.info("    APP_CMD_DESTROY", .{});
+            std.log.debug("onDestroy()", .{});
+            std.log.debug("    APP_CMD_DESTROY", .{});
             appState.NativeWindow = null;
         },
         c.APP_CMD_INIT_WINDOW => {
-            std.log.info("surfaceCreated()", .{});
-            std.log.info("    APP_CMD_INIT_WINDOW", .{});
+            std.log.debug("surfaceCreated()", .{});
+            std.log.debug("    APP_CMD_INIT_WINDOW", .{});
             appState.NativeWindow = app.*.window;
         },
         c.APP_CMD_TERM_WINDOW => {
-            std.log.info("surfaceDestroyed()", .{});
-            std.log.info("    APP_CMD_TERM_WINDOW", .{});
+            std.log.debug("surfaceDestroyed()", .{});
+            std.log.debug("    APP_CMD_TERM_WINDOW", .{});
             appState.NativeWindow = null;
         },
         else => {},

@@ -20,6 +20,11 @@ pub const std_options: std.Options = .{
 };
 
 pub fn main() !void {
+    // Spawn a thread to wait for a keypress
+    var quit_key: QuitKeyObserver = .{};
+    try quit_key.spawn();
+    defer quit_key.deinit();
+
     // const allocator = std.heap.c_allocator;
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
@@ -30,23 +35,21 @@ pub fn main() !void {
         return;
     }
 
-    // Spawn a thread to wait for a keypress
-    var quit_key: QuitKeyObserver = .{};
-    try quit_key.spawn();
-    defer quit_key.deinit();
-
     while (!quit_key.quitKeyPressed) {
         var instance = try xrs.Instance.init(allocator, .{
             .gfx_extensions = gfx.GetInstanceExtensions(),
             .form_factor = options.parsed.FormFactor,
         });
         defer instance.deinit();
+        const blend_mode = try instance.getPreferredBlendMode(options.parsed.ViewConfigType);
+        try instance.logViewConfigurations(options.parsed.ViewConfigType, blend_mode);
 
         gfx.init(allocator);
         try gfx.InitializeDevice(instance.instance, instance.systemId);
         defer gfx.deinit(allocator);
 
         var session = try xrs.Session.init(
+            allocator,
             instance.instance,
             instance.systemId,
             gfx.GetGraphicsBinding(),
@@ -62,10 +65,6 @@ pub fn main() !void {
             &options,
         );
         defer prog.deinit();
-
-        try prog.LogViewConfigurations();
-
-        try prog.LogReferenceSpaces();
 
         var action = try xrs.Action.init(allocator, prog.instance, prog.session);
         defer action.deinit();
@@ -97,11 +96,12 @@ pub fn main() !void {
                             if (try prog.locate(frameState.predictedDisplayTime)) {
                                 const cubes = try action.update(prog.appSpace, frameState.predictedDisplayTime);
                                 layer = try prog.renderLayer(
+                                    blend_mode,
                                     cubes,
                                 );
                             }
                         }
-                        try prog.endFrame(frameState.predictedDisplayTime, layer);
+                        try prog.endFrame(frameState.predictedDisplayTime, blend_mode, layer);
                     } else {
                         // Throttle loop since xrWaitFrame won't be called.
                         std.Thread.sleep(std.time.ns_per_ms * 250);

@@ -60,7 +60,7 @@ var m_colorToDepthMap: std.AutoHashMap(u32, u32) = undefined;
 
 pub fn init(allocator: std.mem.Allocator) void {
     std.log.info("## OpenGL.init ##", .{});
-    std.log.info("GFX => OpenGL", .{});
+    std.log.debug("GFX => OpenGL", .{});
     m_colorToDepthMap = .init(allocator);
 }
 

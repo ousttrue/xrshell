@@ -5,6 +5,7 @@ const XrResult = xr_result.XrResult;
 const XrError = xr_result.XrError;
 const xr_util = @import("xr_util.zig");
 
+allocator: std.mem.Allocator,
 instance: c.XrInstance = null,
 systemId: c.XrSystemId = c.XR_NULL_SYSTEM_ID,
 eventDataBuffer: c.XrEventDataBuffer = undefined,
@@ -45,7 +46,9 @@ pub fn init(allocator: std.mem.Allocator, opts: Options) XrError!@This() {
     //     }
     // }
 
-    var this = @This(){};
+    var this = @This(){
+        .allocator = allocator,
+    };
 
     // Create union of extensions required by platform and graphics plugins.
     // const gfx_extensions = gfx.GetInstanceExtensions();
@@ -53,7 +56,7 @@ pub fn init(allocator: std.mem.Allocator, opts: Options) XrError!@This() {
     defer extensions.deinit(allocator);
     for (opts.gfx_extensions, 0..) |e, i| {
         const p: [*:0]const u8 = @ptrCast(e);
-        std.log.info("GFX[{}]extension: {s}", .{ i, std.mem.span(p) });
+        std.log.debug("GFX[{}]extension: {s}", .{ i, std.mem.span(p) });
         try extensions.append(allocator, e);
     }
     var createInfo: c.XrInstanceCreateInfo = .{
@@ -70,7 +73,7 @@ pub fn init(allocator: std.mem.Allocator, opts: Options) XrError!@This() {
 
     var instanceProperties: c.XrInstanceProperties = .{ .type = c.XR_TYPE_INSTANCE_PROPERTIES };
     _ = try XrResult.init(c.xrGetInstanceProperties(this.instance, &instanceProperties));
-    std.log.info("Instance RuntimeName={s} RuntimeVersion={s}", .{
+    std.log.debug("Instance RuntimeName={s} RuntimeVersion={s}", .{
         instanceProperties.runtimeName,
         xr_util.getXrVersionString(&version_str, instanceProperties.runtimeVersion),
     });
@@ -95,6 +98,166 @@ pub fn deinit(this: *@This()) void {
     }
 }
 
+pub fn logViewConfigurations(
+    this: *@This(),
+    view_config_type: c.XrViewConfigurationType,
+    blend_mode: c.XrEnvironmentBlendMode,
+) XrError!void {
+    var viewConfigTypeCount: u32 = undefined;
+    _ = try XrResult.init(c.xrEnumerateViewConfigurations(
+        this.instance,
+        this.systemId,
+        0,
+        &viewConfigTypeCount,
+        null,
+    ));
+    const viewConfigTypes = try this.allocator.alloc(c.XrViewConfigurationType, viewConfigTypeCount);
+    defer this.allocator.free(viewConfigTypes);
+    _ = try XrResult.init(c.xrEnumerateViewConfigurations(
+        this.instance,
+        this.systemId,
+        viewConfigTypeCount,
+        &viewConfigTypeCount,
+        viewConfigTypes.ptr,
+    ));
+    std.debug.assert(viewConfigTypes.len == viewConfigTypeCount);
+
+    std.log.debug("Available View Configuration Types: ({})", .{viewConfigTypeCount});
+    for (viewConfigTypes) |viewConfigType| {
+        std.log.debug("  View Configuration Type: {} {s}", .{
+            viewConfigType,
+            if (viewConfigType == view_config_type) "(Selected)" else "",
+        });
+
+        var viewConfigProperties: c.XrViewConfigurationProperties = .{ .type = c.XR_TYPE_VIEW_CONFIGURATION_PROPERTIES };
+        _ = try XrResult.init(c.xrGetViewConfigurationProperties(
+            this.instance,
+            this.systemId,
+            viewConfigType,
+            &viewConfigProperties,
+        ));
+
+        std.log.debug("  View configuration FovMutable={s}", .{
+            if (viewConfigProperties.fovMutable == c.XR_TRUE) "True" else "False",
+        });
+
+        var viewCount: u32 = undefined;
+        _ = try XrResult.init(c.xrEnumerateViewConfigurationViews(
+            this.instance,
+            this.systemId,
+            viewConfigType,
+            0,
+            &viewCount,
+            null,
+        ));
+        if (viewCount > 0) {
+            const views = try this.allocator.alloc(c.XrViewConfigurationView, viewCount);
+            defer this.allocator.free(views);
+            for (views) |*view| {
+                view.* = .{ .type = c.XR_TYPE_VIEW_CONFIGURATION_VIEW };
+            }
+            _ = try XrResult.init(c.xrEnumerateViewConfigurationViews(
+                this.instance,
+                this.systemId,
+                viewConfigType,
+                viewCount,
+                &viewCount,
+                views.ptr,
+            ));
+
+            for (views, 0..) |view, i| {
+                std.log.debug("    View [{}]: Recommended Width={} Height={} SampleCount={}", .{
+                    i,                               view.recommendedImageRectWidth,
+                    view.recommendedImageRectHeight, view.recommendedSwapchainSampleCount,
+                });
+                std.log.debug("    View [{}]:     Maximum Width={} Height={} SampleCount={}", .{
+                    i,
+                    view.maxImageRectWidth,
+                    view.maxImageRectHeight,
+                    view.maxSwapchainSampleCount,
+                });
+            }
+        } else {
+            std.log.err("Empty view configuration type", .{});
+        }
+
+        try this.logEnvironmentBlendMode(viewConfigType, blend_mode);
+    }
+}
+
+fn logEnvironmentBlendMode(
+    this: *@This(),
+    view_config_type: c.XrViewConfigurationType,
+    blend_mode: c.XrEnvironmentBlendMode,
+) XrError!void {
+    var count: u32 = undefined;
+    _ = try XrResult.init(c.xrEnumerateEnvironmentBlendModes(
+        this.instance,
+        this.systemId,
+        view_config_type,
+        0,
+        &count,
+        null,
+    ));
+    std.debug.assert(count > 0);
+
+    std.log.debug("Available Environment Blend Mode count : ({})", .{count});
+
+    const blendModes = try this.allocator.alloc(c.XrEnvironmentBlendMode, count);
+    defer this.allocator.free(blendModes);
+    _ = try XrResult.init(c.xrEnumerateEnvironmentBlendModes(
+        this.instance,
+        this.systemId,
+        view_config_type,
+        count,
+        &count,
+        blendModes.ptr,
+    ));
+
+    var blendModeFound = false;
+    for (blendModes) |mode| {
+        const blendModeMatch = (mode == blend_mode);
+        std.log.debug("Environment Blend Mode ({}) : {s}", .{ mode, if (blendModeMatch) "(Selected)" else "" });
+        blendModeFound |= blendModeMatch;
+    }
+    std.debug.assert(blendModeFound);
+}
+
+pub fn getPreferredBlendMode(this: *@This(), view_config_type: c.XrViewConfigurationType) !c.XrEnvironmentBlendMode {
+    var count: u32 = undefined;
+    _ = try XrResult.init(c.xrEnumerateEnvironmentBlendModes(
+        this.instance,
+        this.systemId,
+        view_config_type,
+        0,
+        &count,
+        null,
+    ));
+    const blendModes = try this.allocator.alloc(c.XrEnvironmentBlendMode, count);
+    defer this.allocator.free(blendModes);
+    _ = try XrResult.init(c.xrEnumerateEnvironmentBlendModes(
+        this.instance,
+        this.systemId,
+        view_config_type,
+        count,
+        &count,
+        blendModes.ptr,
+    ));
+    const acceptableBlendModes = [_]c.XrEnvironmentBlendMode{
+        c.XR_ENVIRONMENT_BLEND_MODE_OPAQUE,
+        c.XR_ENVIRONMENT_BLEND_MODE_ADDITIVE,
+        c.XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND,
+    };
+    for (blendModes) |blendMode| {
+        for (acceptableBlendModes) |mode| {
+            if (blendMode == mode) {
+                return blendMode;
+            }
+        }
+    }
+    // THROW("No acceptable blend mode returned from the xrEnumerateEnvironmentBlendModes");
+    return error.NoAcceptableBlendMode;
+}
 pub fn IsSessionFocused(this: *@This()) bool {
     return this.m_sessionState == c.XR_SESSION_STATE_FOCUSED;
 }
@@ -125,7 +288,7 @@ pub fn pollEvents(
                 const stateChangedEvent: *c.XrEventDataSessionStateChanged = @ptrCast(event);
                 const oldState = this.sessionState;
                 this.sessionState = stateChangedEvent.state;
-                std.log.info("XrEventDataSessionStateChanged: state {}->{} session={?} time={}", .{
+                std.log.debug("XrEventDataSessionStateChanged: state {}->{} session={?} time={}", .{
                     oldState,
                     this.sessionState,
                     stateChangedEvent.session,

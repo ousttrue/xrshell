@@ -341,7 +341,7 @@ fn logActionSourceName(
         try sourceName.appendSlice(allocator, "'");
     }
 
-    std.log.info("{s} action is bound to {s}", .{
+    std.log.debug("{s} action is bound to {s}", .{
         actionName,
         if (sourceName.items.len > 0) sourceName.items else "nothing",
     });
