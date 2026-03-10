@@ -7,10 +7,10 @@ else
 const xrs = @import("xrshell/xrshell.zig");
 const XrError = xrs.XrError;
 const XrResult = xrs.XrResult;
-const Options = @import("Options.zig");
 const c = @import("c");
 const Cube = @import("Cube.zig");
 const geometry = @import("geometry.zig");
+const Options = @import("Options.zig");
 
 const Swapchain = struct {
     handle: c.XrSwapchain,
@@ -19,7 +19,6 @@ const Swapchain = struct {
 };
 
 allocator: std.mem.Allocator,
-options: *Options,
 instance: c.XrInstance,
 systemId: c.XrSystemId,
 session: c.XrSession,
@@ -39,7 +38,6 @@ pub fn init(
     instance: c.XrInstance,
     systemId: c.XrSystemId,
     session: c.XrSession,
-    options: *Options,
 ) @This() {
     std.log.info("## OpenXrProgram.init ##", .{});
     return .{
@@ -47,7 +45,6 @@ pub fn init(
         .instance = instance,
         .systemId = systemId,
         .session = session,
-        .options = options,
         .swapchainImages = .init(allocator),
     };
 }
@@ -113,7 +110,7 @@ fn logExtensions(allocator: std.mem.Allocator, _layerName: []const u8, indent: u
 
 var version_str: [64]u8 = undefined;
 
-pub fn CreateSwapchains(this: *@This()) XrError!void {
+pub fn CreateSwapchains(this: *@This(), view_config_type: c.XrViewConfigurationType) XrError!void {
     // Read graphics properties for preferred swapchain length and logging.
     var systemProperties: c.XrSystemProperties = .{ .type = c.XR_TYPE_SYSTEM_PROPERTIES };
     _ = try XrResult.init(c.xrGetSystemProperties(this.instance, this.systemId, &systemProperties));
@@ -135,11 +132,18 @@ pub fn CreateSwapchains(this: *@This()) XrError!void {
     // Note: No other view configurations exist at the time this code was written. If this
     // condition is not met, the project will need to be audited to see how support should be
     // added.
-    std.debug.assert(this.options.ViewConfigType == c.XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO); //, "Unsupported view configuration type");
+    // std.debug.assert(this.options.ViewConfigType == c.XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO); //, "Unsupported view configuration type");
 
     // Query and cache view configuration views.
     var viewCount: u32 = undefined;
-    _ = try XrResult.init(c.xrEnumerateViewConfigurationViews(this.instance, this.systemId, this.options.ViewConfigType, 0, &viewCount, null));
+    _ = try XrResult.init(c.xrEnumerateViewConfigurationViews(
+        this.instance,
+        this.systemId,
+        view_config_type,
+        0,
+        &viewCount,
+        null,
+    ));
     try this.configViews.resize(this.allocator, viewCount);
     for (this.configViews.items) |*item| {
         item.* = .{ .type = c.XR_TYPE_VIEW_CONFIGURATION_VIEW };
@@ -147,7 +151,7 @@ pub fn CreateSwapchains(this: *@This()) XrError!void {
     _ = try XrResult.init(c.xrEnumerateViewConfigurationViews(
         this.instance,
         this.systemId,
-        this.options.ViewConfigType,
+        view_config_type,
         viewCount,
         &viewCount,
         this.configViews.items.ptr,
@@ -333,13 +337,17 @@ pub fn beginFrame(this: @This()) !c.XrFrameState {
     return frameState;
 }
 
-pub fn locate(this: *@This(), predictedDisplayTime: c.XrTime) !bool {
+pub fn locate(
+    this: *@This(),
+    predictedDisplayTime: c.XrTime,
+    view_config_type: c.XrViewConfigurationType,
+) !bool {
     var viewState: c.XrViewState = .{ .type = c.XR_TYPE_VIEW_STATE };
     const viewCapacityInput: u32 = @intCast(this.views.items.len);
     var viewCountOutput: u32 = undefined;
     var viewLocateInfo: c.XrViewLocateInfo = .{
         .type = c.XR_TYPE_VIEW_LOCATE_INFO,
-        .viewConfigurationType = this.options.ViewConfigType,
+        .viewConfigurationType = view_config_type,
         .displayTime = predictedDisplayTime,
         .space = this.appSpace,
     };

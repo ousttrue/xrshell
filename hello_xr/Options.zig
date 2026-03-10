@@ -79,6 +79,45 @@ FormFactor: c.XrFormFactor = c.XR_FORM_FACTOR_HEAD_MOUNTED_DISPLAY,
 ViewConfigType: c.XrViewConfigurationType = c.XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO,
 AppSpace: ReferenceSpaceType = .Local,
 
+pub fn init(argv: [][*:0]u8) !@This() {
+    var this: @This() = .{};
+
+    var i: usize = 1;
+    while (i < argv.len) {
+        const arg = getNextArg(argv, &i);
+        if (std.ascii.eqlIgnoreCase(arg, "--formfactor") or std.ascii.eqlIgnoreCase(arg, "-ff")) {
+            this.FormFactor = try GetXrFormFactor(.init(getNextArg(argv, &i)));
+        } else if (std.ascii.eqlIgnoreCase(arg, "--viewconfig") or std.ascii.eqlIgnoreCase(arg, "-vc")) {
+            this.ViewConfigType = try GetXrViewConfigurationType(.init(getNextArg(argv, &i)));
+        } else if (std.ascii.eqlIgnoreCase(arg, "--space") or std.ascii.eqlIgnoreCase(arg, "-s")) {
+            const val = getNextArg(argv, &i);
+            inline for (@typeInfo(ReferenceSpaceType).@"enum".fields) |f| {
+                if (std.ascii.eqlIgnoreCase(f.name, val)) {
+                    this.AppSpace = @enumFromInt(f.value);
+                }
+            }
+        } else if (std.ascii.eqlIgnoreCase(arg, "--verbose") or std.ascii.eqlIgnoreCase(arg, "-v")) {
+            // Log::SetLevel(Log::Level::Verbose);
+        } else if (std.ascii.eqlIgnoreCase(arg, "--help") or std.ascii.eqlIgnoreCase(arg, "-h")) {
+            ShowHelp();
+            return error.help;
+        } else {
+            std.log.err("Unknown argument: {s}", .{arg});
+            unreachable;
+        }
+    }
+
+    return this;
+}
+
+fn getNextArg(argv: [][*:0]u8, i: *usize) []const u8 {
+    if (i.* >= argv.len) {
+        @panic("Argument parameter missing");
+    }
+    defer i.* += 1;
+    return std.mem.span(argv[i.*]);
+}
+
 pub fn GetBackgroundClearColor(environmentBlendMode: c.XrEnvironmentBlendMode) [4]f32 {
     const SlateGrey = [4]f32{ 0.184313729, 0.309803933, 0.309803933, 1.0 };
     const TransparentBlack = [4]f32{ 0.0, 0.0, 0.0, 0.0 };
@@ -165,54 +204,4 @@ fn ShowHelp() void {
     std.log.info("View configurations:      Mono, Stereo", .{});
     std.log.info("Environment blend modes:  Opaque, Additive, AlphaBlend", .{});
     std.log.info("Spaces:                   View, Local, Stage", .{});
-}
-
-const Parser = struct {
-    options: *Options,
-    argv: [][*:0]u8,
-    // Index 0 is the program name and is skipped.
-    i: usize = 1,
-
-    fn getNextArg(this: *@This()) []const u8 {
-        if (this.i >= this.argv.len) {
-            @panic("Argument parameter missing");
-        }
-        defer this.i += 1;
-        return std.mem.span(this.argv[this.i]);
-    }
-
-    fn parse(this: *@This()) !void {
-        while (this.i < this.argv.len) {
-            const arg = this.getNextArg();
-            if (std.ascii.eqlIgnoreCase(arg, "--formfactor") or std.ascii.eqlIgnoreCase(arg, "-ff")) {
-                this.options.FormFactor = try GetXrFormFactor(.init(this.getNextArg()));
-            } else if (std.ascii.eqlIgnoreCase(arg, "--viewconfig") or std.ascii.eqlIgnoreCase(arg, "-vc")) {
-                this.options.ViewConfigType = try GetXrViewConfigurationType(.init(this.getNextArg()));
-            } else if (std.ascii.eqlIgnoreCase(arg, "--space") or std.ascii.eqlIgnoreCase(arg, "-s")) {
-                const val = this.getNextArg();
-                // this.options.AppSpace = .init();
-                inline for (@typeInfo(ReferenceSpaceType).@"enum".fields) |f| {
-                    if (std.ascii.eqlIgnoreCase(f.name, val)) {
-                        this.options.AppSpace = @enumFromInt(f.value);
-                    }
-                }
-            } else if (std.ascii.eqlIgnoreCase(arg, "--verbose") or std.ascii.eqlIgnoreCase(arg, "-v")) {
-                // Log::SetLevel(Log::Level::Verbose);
-            } else if (std.ascii.eqlIgnoreCase(arg, "--help") or std.ascii.eqlIgnoreCase(arg, "-h")) {
-                ShowHelp();
-                return;
-            } else {
-                std.log.err("Unknown argument: {s}", .{arg});
-                unreachable;
-            }
-        }
-    }
-};
-
-pub fn UpdateOptionsFromCommandLine(this: *@This(), argv: [][*:0]u8) !void {
-    var parser: Parser = .{
-        .options = this,
-        .argv = argv,
-    };
-    try parser.parse();
 }

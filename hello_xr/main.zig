@@ -30,10 +30,11 @@ pub fn main() !void {
     const allocator = gpa.allocator();
     defer std.debug.assert(gpa.deinit() == .ok);
 
-    var options: Options = .{};
-    try options.UpdateOptionsFromCommandLine(std.os.argv);
+    const options: Options = try .init(std.os.argv);
 
     while (!quit_key.quitKeyPressed) {
+        std.log.warn("New instance", .{});
+
         var instance = try xrs.Instance.init(allocator, .{
             .gfx_extensions = gfx.GetInstanceExtensions(),
             .form_factor = options.FormFactor,
@@ -60,7 +61,6 @@ pub fn main() !void {
             instance.instance,
             instance.systemId,
             session.session,
-            &options,
         );
         defer prog.deinit();
 
@@ -68,12 +68,13 @@ pub fn main() !void {
         defer action.deinit();
 
         {
-            const referenceSpaceCreateInfo = prog.options.AppSpace.makeXrReferenceSpaceCreateInfo();
+            const referenceSpaceCreateInfo = options.AppSpace.makeXrReferenceSpaceCreateInfo();
             _ = try XrResult.init(c.xrCreateReferenceSpace(prog.session, &referenceSpaceCreateInfo, &prog.appSpace));
         }
 
-        try prog.CreateSwapchains();
+        try prog.CreateSwapchains(options.ViewConfigType);
 
+        std.log.warn("Loop start", .{});
         while (!quit_key.quitKeyPressed) {
             switch (try instance.pollEvents()) {
                 .quit => {
@@ -86,12 +87,10 @@ pub fn main() !void {
                     if (isSessionRunning) {
                         try action.pollActions();
 
-                        // try prog.run_frame(cubes);
-                        // try OpenXrProgram.oRenderFrame(allocator);
                         const frameState = try prog.beginFrame();
                         var layer: ?*c.XrCompositionLayerBaseHeader = null;
                         if (frameState.shouldRender == c.XR_TRUE) {
-                            if (try prog.locate(frameState.predictedDisplayTime)) {
+                            if (try prog.locate(frameState.predictedDisplayTime, options.ViewConfigType)) {
                                 const cubes = try action.update(prog.appSpace, frameState.predictedDisplayTime);
                                 layer = try prog.renderLayer(
                                     blend_mode,
