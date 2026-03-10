@@ -11,10 +11,6 @@ fn BIT(x: usize) u32 {
 const APPLICATION_NAME = "OpenGL SI";
 const WINDOW_TITLE = "OpenGL SI";
 
-const ksDriverInstance = struct {
-    placeholder: c_int = undefined,
-};
-
 const ksGpuQueueProperty = enum(u32) {
     GRAPHICS = BIT(0),
     COMPUTE = BIT(1),
@@ -28,42 +24,6 @@ const ksGpuQueuePriority = enum {
 };
 
 const MAX_QUEUES = 16;
-
-const ksGpuQueueInfo = struct {
-    // number of queues
-    queueCount: c_int = undefined,
-    // desired queue family properties
-    queueProperties: ksGpuQueueProperty = undefined,
-    // individual queue priorities
-    queuePriorities: [MAX_QUEUES]ksGpuQueuePriority = undefined,
-};
-
-const ksGpuDevice = struct {
-    instance: *ksDriverInstance,
-    queueInfo: ksGpuQueueInfo,
-
-    fn create(device: *ksGpuDevice, instance: *ksDriverInstance, queueInfo: *const ksGpuQueueInfo) bool {
-        // Use an extensions to select the appropriate device:
-        // https://www.opengl.org/registry/specs/NV/gpu_affinity.txt
-        // https://www.opengl.org/registry/specs/AMD/wgl_gpu_association.txt
-        // https://www.opengl.org/registry/specs/AMD/glx_gpu_association.txt
-        //
-        // On Linux configure each GPU to use a separate X screen and then select
-        // the X screen to render to.
-        device.* = .{
-            .instance = instance,
-            .queueInfo = queueInfo.*,
-        };
-        return true;
-    }
-
-    fn destroy(device: *ksGpuDevice) void {
-        device.* = .{
-            .instance = undefined,
-            .queueInfo = undefined,
-        };
-    }
-};
 
 const ksGpuSurfaceColorFormat = enum { R5G6B5, B5G6R5, R8G8B8A8, B8G8R8A8, MAX };
 
@@ -85,24 +45,16 @@ const ksGpuLimits = struct {
 };
 
 const ksGpuContext = struct {
-    device: *const ksGpuDevice,
-    hDC: c.HDC,
-    hGLRC: c.HGLRC,
+    hDC: c.HDC = null,
+    hGLRC: c.HGLRC = null,
 
-    fn createForSurface(
-        context: *ksGpuContext,
-        device: *const ksGpuDevice,
-        queueIndex: c_int,
+    fn init(
         colorFormat: ksGpuSurfaceColorFormat,
         depthFormat: ksGpuSurfaceDepthFormat,
         sampleCount: ksGpuSampleCount,
         hInstance: c.HINSTANCE,
         hDC: c.HDC,
-    ) bool {
-        _ = queueIndex;
-
-        context.device = device;
-
+    ) @This() {
         const bits: ksGpuSurfaceBits = .fromSurfaceFormat(colorFormat, depthFormat);
 
         var pfd: c.PIXELFORMATDESCRIPTOR = .{
@@ -151,13 +103,11 @@ const ksGpuContext = struct {
 
         const pixelFormat = c.ChoosePixelFormat(localDC, &pfd);
         if (pixelFormat == 0) {
-            std.log.err("Failed to find a suitable pixel format.", .{});
-            return false;
+            @panic("Failed to find a suitable pixel format.");
         }
 
         if (0 == c.SetPixelFormat(localDC, pixelFormat, &pfd)) {
-            std.log.err("Failed to set the pixel format.", .{});
-            return false;
+            @panic("Failed to set the pixel format.");
         }
 
         // Now that the pixel format is set, create a temporary context to get the extensions.
@@ -200,20 +150,17 @@ const ksGpuContext = struct {
             var numPixelFormats: u32 = 0;
 
             if (0 == c.wglChoosePixelFormatARB(hDC, &pixelFormatAttribs, null, 1, pixelFormat, &numPixelFormats) or numPixelFormats == 0) {
-                std.log.err("Failed to find MSAA pixel format.", .{});
-                return false;
+                @panic("Failed to find MSAA pixel format.");
             }
 
             _ = c.memset(&pfd, 0, @sizeOf(@TypeOf(pfd)));
 
             if (0 == c.DescribePixelFormat(hDC, pixelFormat, @sizeOf(c.PIXELFORMATDESCRIPTOR), &pfd)) {
-                std.log.err("Failed to describe the pixel format.", .{});
-                return false;
+                @panic("Failed to describe the pixel format.");
             }
 
             if (0 == c.SetPixelFormat(hDC, pixelFormat, &pfd)) {
-                std.log.err("Failed to set the pixel format.", .{});
-                return false;
+                @panic("Failed to set the pixel format.");
             }
         }
 
@@ -229,16 +176,16 @@ const ksGpuContext = struct {
             0,
         };
 
-        context.hDC = hDC;
-        context.hGLRC = c.wglCreateContextAttribsARB(hDC, null, &contextAttribs);
-        if (null == context.hGLRC) {
-            std.log.err("Failed to create GL context.", .{});
-            return false;
+        const hGLRC = c.wglCreateContextAttribsARB(hDC, null, &contextAttribs);
+        if (null == hGLRC) {
+            @panic("Failed to create GL context.");
         }
+        _ = c.wglMakeCurrent(hDC, hGLRC);
 
-        _ = c.wglMakeCurrent(hDC, context.hGLRC);
-
-        return true;
+        return .{
+            .hDC = hDC,
+            .hGLRC = hGLRC,
+        };
     }
 
     fn destroy(context: *ksGpuContext) void {
@@ -355,15 +302,14 @@ const ksGpuSurfaceBits = struct {
 const ksGpuWindowEvent = enum { NONE, ACTIVATED, DEACTIVATED, EXIT };
 
 const ksGpuWindowInput = struct {
-    keyInput: [256]bool,
-    mouseInput: [8]bool,
-    mouseInputX: [8]c_int,
-    mouseInputY: [8]c_int,
+    keyInput: [256]bool = undefined,
+    mouseInput: [8]bool = undefined,
+    mouseInputX: [8]c_int = undefined,
+    mouseInputY: [8]c_int = undefined,
 };
 
 const ksGpuWindow = struct {
-    device: ksGpuDevice,
-    context: ksGpuContext,
+    context: ksGpuContext = .{},
     colorFormat: ksGpuSurfaceColorFormat,
     depthFormat: ksGpuSurfaceDepthFormat,
     sampleCount: ksGpuSampleCount,
@@ -374,70 +320,37 @@ const ksGpuWindow = struct {
     windowFullscreen: bool,
     windowActive: bool,
     windowExit: bool,
-    input: ksGpuWindowInput,
+    input: ksGpuWindowInput = .{},
 
-    hInstance: c.HINSTANCE,
-    hDC: c.HDC,
-    hWnd: c.HWND,
+    hInstance: c.HINSTANCE = null,
+    hDC: c.HDC = null,
+    hWnd: c.HWND = null,
     windowActiveState: bool,
 
-    fn destroy(window: *ksGpuWindow) void {
-        window.context.destroy();
-        window.device.destroy();
-
-        //     if (window.windowFullscreen) {
-        //         ChangeDisplaySettingsA(null, 0);
-        //         ShowCursor(TRUE);
-        //     }
-        //
-        //     if (window.hDC) {
-        //         if (!ReleaseDC(window.hWnd, window.hDC)) {
-        //             Error("Failed to release device context.");
-        //         }
-        //         window.hDC = null;
-        //     }
-        //
-        //     if (window.hWnd) {
-        //         if (!DestroyWindow(window.hWnd)) {
-        //             Error("Failed to destroy the window.");
-        //         }
-        //         window.hWnd = null;
-        //     }
-        //
-        //     if (window.hInstance) {
-        //         if (!UnregisterClassA(APPLICATION_NAME, window.hInstance)) {
-        //             Error("Failed to unregister window class.");
-        //         }
-        //         window.hInstance = null;
-        //     }
-    }
-
-    fn create(
-        window: *ksGpuWindow,
-        instance: *ksDriverInstance,
-        queueInfo: *const ksGpuQueueInfo,
-        queueIndex: c_int,
+    fn init(
         colorFormat: ksGpuSurfaceColorFormat,
         depthFormat: ksGpuSurfaceDepthFormat,
         sampleCount: ksGpuSampleCount,
         width: c_int,
         height: c_int,
         fullscreen: bool,
-    ) bool {
-        _ = c.memset(window, 0, @sizeOf(ksGpuWindow));
+    ) @This() {
+        return .{
+            .colorFormat = colorFormat,
+            .depthFormat = depthFormat,
+            .sampleCount = sampleCount,
+            .windowWidth = width,
+            .windowHeight = height,
+            .windowSwapInterval = 1,
+            .windowRefreshRate = 60.0,
+            .windowFullscreen = fullscreen,
+            .windowActive = false,
+            .windowExit = false,
+            .windowActiveState = false,
+        };
+    }
 
-        window.colorFormat = colorFormat;
-        window.depthFormat = depthFormat;
-        window.sampleCount = sampleCount;
-        window.windowWidth = width;
-        window.windowHeight = height;
-        window.windowSwapInterval = 1;
-        window.windowRefreshRate = 60.0;
-        window.windowFullscreen = fullscreen;
-        window.windowActive = false;
-        window.windowExit = false;
-        window.windowActiveState = false;
-
+    pub fn create(window: *@This()) bool {
         const displayDevice: c.LPCSTR = null;
 
         if (window.windowFullscreen) {
@@ -502,9 +415,9 @@ const ksGpuWindow = struct {
 
         var windowRect: c.RECT = .{
             .left = 0,
-            .right = width,
+            .right = window.windowWidth,
             .top = 0,
-            .bottom = height,
+            .bottom = window.windowHeight,
         };
 
         _ = c.AdjustWindowRectEx(&windowRect, dwStyle, c.FALSE, dwExStyle);
@@ -551,8 +464,7 @@ const ksGpuWindow = struct {
             return false;
         }
 
-        _ = window.device.create(instance, queueInfo);
-        _ = window.context.createForSurface(&window.device, queueIndex, colorFormat, depthFormat, sampleCount, window.hInstance, window.hDC);
+        window.context = .init(window.colorFormat, window.depthFormat, window.sampleCount, window.hInstance, window.hDC);
         window.context.setCurrent();
 
         _ = c.gladLoaderLoadGL();
@@ -562,6 +474,36 @@ const ksGpuWindow = struct {
         _ = c.SetFocus(window.hWnd);
 
         return true;
+    }
+
+    fn destroy(window: *ksGpuWindow) void {
+        window.context.destroy();
+
+        //     if (window.windowFullscreen) {
+        //         ChangeDisplaySettingsA(null, 0);
+        //         ShowCursor(TRUE);
+        //     }
+
+        //     if (window.hDC) {
+        //         if (!ReleaseDC(window.hWnd, window.hDC)) {
+        //             Error("Failed to release device context.");
+        //         }
+        //         window.hDC = null;
+        //     }
+
+        //     if (window.hWnd) {
+        //         if (!DestroyWindow(window.hWnd)) {
+        //             Error("Failed to destroy the window.");
+        //         }
+        //         window.hWnd = null;
+        //     }
+        //
+        //     if (window.hInstance) {
+        //         if (!UnregisterClassA(APPLICATION_NAME, window.hInstance)) {
+        //             Error("Failed to unregister window class.");
+        //         }
+        //         window.hInstance = null;
+        //     }
     }
 
     // APIENTRY
@@ -620,11 +562,6 @@ const ksGpuWindow = struct {
 
 // Initialize the gl extensions. Note we have to open a window.
 var m_window: ksGpuWindow = undefined;
-var m_driverInstance: ksDriverInstance = undefined;
-var m_queueInfo: ksGpuQueueInfo = undefined;
-var m_colorFormat: ksGpuSurfaceColorFormat = .B8G8R8A8;
-var m_depthFormat: ksGpuSurfaceDepthFormat = .D24;
-var m_sampleCount: ksGpuSampleCount = ._1;
 var m_graphicsBinding: c.XrGraphicsBindingOpenGLWin32KHR = .{ .type = c.XR_TYPE_GRAPHICS_BINDING_OPENGL_WIN32_KHR };
 
 pub fn binding() *anyopaque {
@@ -632,15 +569,15 @@ pub fn binding() *anyopaque {
 }
 
 pub fn init() void {
-    m_window = undefined;
-    m_driverInstance = undefined;
-    m_queueInfo = undefined;
-    m_colorFormat = .B8G8R8A8;
-    m_depthFormat = .D24;
-    m_sampleCount = ._1;
+    const m_colorFormat: ksGpuSurfaceColorFormat = .B8G8R8A8;
+    const m_depthFormat: ksGpuSurfaceDepthFormat = .D24;
+    const m_sampleCount: ksGpuSampleCount = ._1;
+    // m_colorFormat = .B8G8R8A8;
+    // m_depthFormat = .D24;
+    // m_sampleCount = ._1;
     m_graphicsBinding = .{ .type = c.XR_TYPE_GRAPHICS_BINDING_OPENGL_WIN32_KHR };
-
-    if (!m_window.create(&m_driverInstance, &m_queueInfo, 0, m_colorFormat, m_depthFormat, m_sampleCount, 640, 480, false)) {
+    m_window = .init(m_colorFormat, m_depthFormat, m_sampleCount, 640, 480, false);
+    if (!m_window.create()) {
         @panic("Unable to create GL context");
     }
 
