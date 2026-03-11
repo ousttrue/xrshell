@@ -5,7 +5,6 @@ const XrError = xrs.XrError;
 const XrResult = xrs.XrResult;
 const geometry = @import("../geometry.zig");
 const Options = @import("../Options.zig");
-const gfxwrapper_opengl = @import("gfxwrapper_opengl_win32.zig");
 const Cube = @import("../Cube.zig");
 const xr_linear = @import("xr_linear.zig");
 
@@ -193,8 +192,6 @@ pub fn InitializeDevice(instance: c.XrInstance, systemId: c.XrSystemId) XrError!
     var graphicsRequirements: c.XrGraphicsRequirementsOpenGLKHR = .{ .type = c.XR_TYPE_GRAPHICS_REQUIREMENTS_OPENGL_KHR };
     _ = try XrResult.init((pfnGetOpenGLGraphicsRequirementsKHR.?)(instance, systemId, &graphicsRequirements));
 
-    gfxwrapper_opengl.init();
-
     var major: c.GLint = 0;
     c.glGetIntegerv(c.GL_MAJOR_VERSION, &major);
     var minor: c.GLint = 0;
@@ -229,10 +226,6 @@ pub fn SelectColorSwapchainFormat(_: std.mem.Allocator, runtimeFormats: []i64) !
     }
 
     @panic("No runtime swapchain format supported for color swapchain");
-}
-
-pub fn GetGraphicsBinding() *c.XrBaseInStructure {
-    return @ptrCast(@alignCast(gfxwrapper_opengl.binding()));
 }
 
 pub fn AllocateSwapchainImageStructs(

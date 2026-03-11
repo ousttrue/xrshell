@@ -1,5 +1,6 @@
 const std = @import("std");
 const c = @import("c");
+const ksGpuWindow = @This();
 
 const OPENGL_VERSION_MAJOR = 4;
 const OPENGL_VERSION_MINOR = 3;
@@ -308,279 +309,247 @@ const ksGpuWindowInput = struct {
     mouseInputY: [8]c_int = undefined,
 };
 
-const ksGpuWindow = struct {
-    context: ksGpuContext = .{},
-    colorFormat: ksGpuSurfaceColorFormat,
-    depthFormat: ksGpuSurfaceDepthFormat,
-    sampleCount: ksGpuSampleCount,
-    windowWidth: c_int,
-    windowHeight: c_int,
-    windowSwapInterval: c_int,
-    windowRefreshRate: f32,
-    windowFullscreen: bool,
-    windowActive: bool,
-    windowExit: bool,
-    input: ksGpuWindowInput = .{},
+allocator: std.mem.Allocator,
+context: ksGpuContext = .{},
+colorFormat: ksGpuSurfaceColorFormat,
+depthFormat: ksGpuSurfaceDepthFormat,
+sampleCount: ksGpuSampleCount,
+windowWidth: c_int,
+windowHeight: c_int,
+windowSwapInterval: c_int,
+windowRefreshRate: f32,
+windowFullscreen: bool,
+windowActive: bool,
+windowExit: bool,
+input: ksGpuWindowInput = .{},
 
-    hInstance: c.HINSTANCE = null,
-    hDC: c.HDC = null,
-    hWnd: c.HWND = null,
-    windowActiveState: bool,
+hInstance: c.HINSTANCE = null,
+hDC: c.HDC = null,
+hWnd: c.HWND = null,
+windowActiveState: bool,
 
-    fn init(
-        colorFormat: ksGpuSurfaceColorFormat,
-        depthFormat: ksGpuSurfaceDepthFormat,
-        sampleCount: ksGpuSampleCount,
-        width: c_int,
-        height: c_int,
-        fullscreen: bool,
-    ) @This() {
-        return .{
-            .colorFormat = colorFormat,
-            .depthFormat = depthFormat,
-            .sampleCount = sampleCount,
-            .windowWidth = width,
-            .windowHeight = height,
-            .windowSwapInterval = 1,
-            .windowRefreshRate = 60.0,
-            .windowFullscreen = fullscreen,
-            .windowActive = false,
-            .windowExit = false,
-            .windowActiveState = false,
-        };
-    }
+pub fn create(
+    allocator: std.mem.Allocator,
+) *@This() {
+    const this = allocator.create(@This()) catch @panic("OOM");
+    this.* = .{
+        .allocator = allocator,
+        .colorFormat = .B8G8R8A8,
+        .depthFormat = .D24,
+        .sampleCount = ._1,
+        .windowWidth = 640,
+        .windowHeight = 480,
+        .windowSwapInterval = 1,
+        .windowRefreshRate = 60.0,
+        .windowFullscreen = false,
+        .windowActive = false,
+        .windowExit = false,
+        .windowActiveState = false,
+    };
 
-    pub fn create(window: *@This()) bool {
-        const displayDevice: c.LPCSTR = null;
+    const displayDevice: c.LPCSTR = null;
 
-        if (window.windowFullscreen) {
-            //     DEVMODEA dmScreenSettings;
-            //     memset(&dmScreenSettings, 0, sizeof(dmScreenSettings));
-            //     dmScreenSettings.dmSize = sizeof(dmScreenSettings);
-            //     dmScreenSettings.dmPelsWidth = width;
-            //     dmScreenSettings.dmPelsHeight = height;
-            //     dmScreenSettings.dmBitsPerPel = 32;
-            //     dmScreenSettings.dmFields = DM_PELSWIDTH | DM_PELSHEIGHT | DM_BITSPERPEL;
-            //
-            //     if (ChangeDisplaySettingsExA(displayDevice, &dmScreenSettings, null, CDS_FULLSCREEN, null) != DISP_CHANGE_SUCCESSFUL) {
-            //         Error("The requested fullscreen mode is not supported.");
-            //         return false;
-            //     }
-        }
-
-        var lpDevMode: c.DEVMODEA = undefined;
-        _ = c.memset(&lpDevMode, 0, @sizeOf(c.DEVMODEA));
-        lpDevMode.dmSize = @sizeOf(c.DEVMODEA);
-        lpDevMode.dmDriverExtra = 0;
-
-        if (c.EnumDisplaySettingsA(displayDevice, c.ENUM_CURRENT_SETTINGS, &lpDevMode) != c.FALSE) {
-            window.windowRefreshRate = @floatFromInt(lpDevMode.dmDisplayFrequency);
-        }
-
-        window.hInstance = c.GetModuleHandleA(null);
-
-        const wc: c.WNDCLASSA = .{
-            .style = c.CS_HREDRAW | c.CS_VREDRAW | c.CS_OWNDC,
-            .lpfnWndProc = WndProc,
-            .cbClsExtra = 0,
-            .cbWndExtra = 0,
-            .hInstance = window.hInstance,
-            .hIcon = c.LoadIconA(null, 32517
-                // c.IDI_WINLOGO
-            ),
-            .hCursor = c.LoadCursorA(null, 32512
-                // c.IDC_ARROW
-            ),
-            .hbrBackground = null,
-            .lpszMenuName = null,
-            .lpszClassName = APPLICATION_NAME,
-        };
-
-        if (0 == c.RegisterClassA(&wc)) {
-            std.log.err("Failed to register window class.", .{});
-            return false;
-        }
-
-        var dwExStyle: c.DWORD = 0;
-        var dwStyle: c.DWORD = 0;
-        if (window.windowFullscreen) {
-            dwExStyle = c.WS_EX_APPWINDOW;
-            dwStyle = c.WS_POPUP;
-            _ = c.ShowCursor(c.FALSE);
-        } else {
-            // Fixed size window.
-            dwExStyle = c.WS_EX_APPWINDOW | c.WS_EX_WINDOWEDGE;
-            dwStyle = c.WS_OVERLAPPED | c.WS_CAPTION | c.WS_SYSMENU | c.WS_MINIMIZEBOX;
-        }
-
-        var windowRect: c.RECT = .{
-            .left = 0,
-            .right = window.windowWidth,
-            .top = 0,
-            .bottom = window.windowHeight,
-        };
-
-        _ = c.AdjustWindowRectEx(&windowRect, dwStyle, c.FALSE, dwExStyle);
-
-        if (!window.windowFullscreen) {
-            var desktopRect: c.RECT = undefined;
-            _ = c.GetWindowRect(c.GetDesktopWindow(), &desktopRect);
-
-            const offsetX = @divTrunc((desktopRect.right - (windowRect.right - windowRect.left)), 2);
-            const offsetY = @divTrunc((desktopRect.bottom - (windowRect.bottom - windowRect.top)), 2);
-
-            windowRect.left += offsetX;
-            windowRect.right += offsetX;
-            windowRect.top += offsetY;
-            windowRect.bottom += offsetY;
-        }
-
-        window.hWnd = c.CreateWindowExA(dwExStyle, // Extended style for the window
-            APPLICATION_NAME, // Class name
-            WINDOW_TITLE, // Window title
-            dwStyle | // Defined window style
-                c.WS_CLIPSIBLINGS | // Required window style
-                c.WS_CLIPCHILDREN, // Required window style
-            windowRect.left, // Window X position
-            windowRect.top, // Window Y position
-            windowRect.right - windowRect.left, // Window width
-            windowRect.bottom - windowRect.top, // Window height
-            null, // No parent window
-            null, // No menu
-            window.hInstance, // Instance
-            null); // No WM_CREATE parameter
-        if (null == window.hWnd) {
-            window.destroy();
-            std.log.err("Failed to create window.", .{});
-            return false;
-        }
-
-        _ = c.SetWindowLongPtrA(window.hWnd, c.GWLP_USERDATA, @intCast(@intFromPtr(window)));
-
-        window.hDC = c.GetDC(window.hWnd);
-        if (window.hDC == null) {
-            window.destroy();
-            std.log.err("Failed to acquire device context.", .{});
-            return false;
-        }
-
-        window.context = .init(window.colorFormat, window.depthFormat, window.sampleCount, window.hInstance, window.hDC);
-        window.context.setCurrent();
-
-        _ = c.gladLoaderLoadGL();
-
-        _ = c.ShowWindow(window.hWnd, c.SW_SHOW);
-        _ = c.SetForegroundWindow(window.hWnd);
-        _ = c.SetFocus(window.hWnd);
-
-        return true;
-    }
-
-    fn destroy(window: *ksGpuWindow) void {
-        window.context.destroy();
-
-        //     if (window.windowFullscreen) {
-        //         ChangeDisplaySettingsA(null, 0);
-        //         ShowCursor(TRUE);
-        //     }
-
-        //     if (window.hDC) {
-        //         if (!ReleaseDC(window.hWnd, window.hDC)) {
-        //             Error("Failed to release device context.");
-        //         }
-        //         window.hDC = null;
-        //     }
-
-        //     if (window.hWnd) {
-        //         if (!DestroyWindow(window.hWnd)) {
-        //             Error("Failed to destroy the window.");
-        //         }
-        //         window.hWnd = null;
-        //     }
+    if (this.windowFullscreen) {
+        //     DEVMODEA dmScreenSettings;
+        //     memset(&dmScreenSettings, 0, sizeof(dmScreenSettings));
+        //     dmScreenSettings.dmSize = sizeof(dmScreenSettings);
+        //     dmScreenSettings.dmPelsWidth = width;
+        //     dmScreenSettings.dmPelsHeight = height;
+        //     dmScreenSettings.dmBitsPerPel = 32;
+        //     dmScreenSettings.dmFields = DM_PELSWIDTH | DM_PELSHEIGHT | DM_BITSPERPEL;
         //
-        //     if (window.hInstance) {
-        //         if (!UnregisterClassA(APPLICATION_NAME, window.hInstance)) {
-        //             Error("Failed to unregister window class.");
-        //         }
-        //         window.hInstance = null;
+        //     if (ChangeDisplaySettingsExA(displayDevice, &dmScreenSettings, null, CDS_FULLSCREEN, null) != DISP_CHANGE_SUCCESSFUL) {
+        //         Error("The requested fullscreen mode is not supported.");
+        //         return false;
         //     }
     }
 
-    // APIENTRY
-    export fn WndProc(hWnd: c.HWND, message: c.UINT, wParam: c.WPARAM, lParam: c.LPARAM) c.LRESULT {
-        //     ksGpuWindow* window = (ksGpuWindow*)GetWindowLongPtrA(hWnd, GWLP_USERDATA);
-        //
-        //     switch (message) {
-        //         case WM_SIZE: {
-        //             if (window != null) {
-        //                 window.windowWidth = (int)LOWORD(lParam);
-        //                 window.windowHeight = (int)HIWORD(lParam);
-        //             }
-        //             return 0;
-        //         }
-        //         case WM_ACTIVATE: {
-        //             if (window != null) {
-        //                 window.windowActiveState = !HIWORD(wParam);
-        //             }
-        //             return 0;
-        //         }
-        //         case WM_ERASEBKGND: {
-        //             return 0;
-        //         }
-        //         case WM_CLOSE: {
-        //             PostQuitMessage(0);
-        //             return 0;
-        //         }
-        //         case WM_KEYDOWN: {
-        //             if (window != null) {
-        //                 if ((int)wParam >= 0 && (int)wParam < 256) {
-        //                     if ((int)wParam != KEY_SHIFT_LEFT && (int)wParam != KEY_CTRL_LEFT && (int)wParam != KEY_ALT_LEFT &&
-        //                         (int)wParam != KEY_CURSOR_UP && (int)wParam != KEY_CURSOR_DOWN && (int)wParam != KEY_CURSOR_LEFT &&
-        //                         (int)wParam != KEY_CURSOR_RIGHT) {
-        //                         window.input.keyInput[(int)wParam] = true;
-        //                     }
-        //                 }
-        //             }
-        //             break;
-        //         }
-        //         case WM_LBUTTONDOWN: {
-        //             window.input.mouseInput[MOUSE_LEFT] = true;
-        //             window.input.mouseInputX[MOUSE_LEFT] = LOWORD(lParam);
-        //             window.input.mouseInputY[MOUSE_LEFT] = window.windowHeight - HIWORD(lParam);
-        //             break;
-        //         }
-        //         case WM_RBUTTONDOWN: {
-        //             window.input.mouseInput[MOUSE_RIGHT] = true;
-        //             window.input.mouseInputX[MOUSE_RIGHT] = LOWORD(lParam);
-        //             window.input.mouseInputY[MOUSE_RIGHT] = window.windowHeight - HIWORD(lParam);
-        //             break;
-        //         }
-        //     }
-        return c.DefWindowProcA(hWnd, message, wParam, lParam);
+    var lpDevMode: c.DEVMODEA = undefined;
+    _ = c.memset(&lpDevMode, 0, @sizeOf(c.DEVMODEA));
+    lpDevMode.dmSize = @sizeOf(c.DEVMODEA);
+    lpDevMode.dmDriverExtra = 0;
+
+    if (c.EnumDisplaySettingsA(displayDevice, c.ENUM_CURRENT_SETTINGS, &lpDevMode) != c.FALSE) {
+        this.windowRefreshRate = @floatFromInt(lpDevMode.dmDisplayFrequency);
     }
-};
 
-// Initialize the gl extensions. Note we have to open a window.
-var m_window: ksGpuWindow = undefined;
-var m_graphicsBinding: c.XrGraphicsBindingOpenGLWin32KHR = .{ .type = c.XR_TYPE_GRAPHICS_BINDING_OPENGL_WIN32_KHR };
+    this.hInstance = c.GetModuleHandleA(null);
 
-pub fn binding() *anyopaque {
-    return &m_graphicsBinding;
+    const wc: c.WNDCLASSA = .{
+        .style = c.CS_HREDRAW | c.CS_VREDRAW | c.CS_OWNDC,
+        .lpfnWndProc = WndProc,
+        .cbClsExtra = 0,
+        .cbWndExtra = 0,
+        .hInstance = this.hInstance,
+        .hIcon = c.LoadIconA(null, 32517
+            // c.IDI_WINLOGO
+        ),
+        .hCursor = c.LoadCursorA(null, 32512
+            // c.IDC_ARROW
+        ),
+        .hbrBackground = null,
+        .lpszMenuName = null,
+        .lpszClassName = APPLICATION_NAME,
+    };
+
+    if (0 == c.RegisterClassA(&wc)) {
+        @panic("Failed to register window class.");
+    }
+
+    var dwExStyle: c.DWORD = 0;
+    var dwStyle: c.DWORD = 0;
+    if (this.windowFullscreen) {
+        dwExStyle = c.WS_EX_APPWINDOW;
+        dwStyle = c.WS_POPUP;
+        _ = c.ShowCursor(c.FALSE);
+    } else {
+        // Fixed size window.
+        dwExStyle = c.WS_EX_APPWINDOW | c.WS_EX_WINDOWEDGE;
+        dwStyle = c.WS_OVERLAPPED | c.WS_CAPTION | c.WS_SYSMENU | c.WS_MINIMIZEBOX;
+    }
+
+    var windowRect: c.RECT = .{
+        .left = 0,
+        .right = this.windowWidth,
+        .top = 0,
+        .bottom = this.windowHeight,
+    };
+
+    _ = c.AdjustWindowRectEx(&windowRect, dwStyle, c.FALSE, dwExStyle);
+
+    if (!this.windowFullscreen) {
+        var desktopRect: c.RECT = undefined;
+        _ = c.GetWindowRect(c.GetDesktopWindow(), &desktopRect);
+
+        const offsetX = @divTrunc((desktopRect.right - (windowRect.right - windowRect.left)), 2);
+        const offsetY = @divTrunc((desktopRect.bottom - (windowRect.bottom - windowRect.top)), 2);
+
+        windowRect.left += offsetX;
+        windowRect.right += offsetX;
+        windowRect.top += offsetY;
+        windowRect.bottom += offsetY;
+    }
+
+    this.hWnd = c.CreateWindowExA(dwExStyle, // Extended style for the window
+        APPLICATION_NAME, // Class name
+        WINDOW_TITLE, // Window title
+        dwStyle | // Defined window style
+            c.WS_CLIPSIBLINGS | // Required window style
+            c.WS_CLIPCHILDREN, // Required window style
+        windowRect.left, // Window X position
+        windowRect.top, // Window Y position
+        windowRect.right - windowRect.left, // Window width
+        windowRect.bottom - windowRect.top, // Window height
+        null, // No parent window
+        null, // No menu
+        this.hInstance, // Instance
+        null); // No WM_CREATE parameter
+    if (null == this.hWnd) {
+        this.destroy();
+        @panic("Failed to create window.");
+    }
+
+    _ = c.SetWindowLongPtrA(this.hWnd, c.GWLP_USERDATA, @intCast(@intFromPtr(this)));
+
+    this.hDC = c.GetDC(this.hWnd);
+    if (this.hDC == null) {
+        this.destroy();
+        @panic("Failed to acquire device context.");
+    }
+
+    this.context = .init(this.colorFormat, this.depthFormat, this.sampleCount, this.hInstance, this.hDC);
+    this.context.setCurrent();
+
+    _ = c.gladLoaderLoadGL();
+
+    _ = c.ShowWindow(this.hWnd, c.SW_SHOW);
+    _ = c.SetForegroundWindow(this.hWnd);
+    _ = c.SetFocus(this.hWnd);
+
+    return this;
 }
 
-pub fn init() void {
-    const m_colorFormat: ksGpuSurfaceColorFormat = .B8G8R8A8;
-    const m_depthFormat: ksGpuSurfaceDepthFormat = .D24;
-    const m_sampleCount: ksGpuSampleCount = ._1;
-    // m_colorFormat = .B8G8R8A8;
-    // m_depthFormat = .D24;
-    // m_sampleCount = ._1;
-    m_graphicsBinding = .{ .type = c.XR_TYPE_GRAPHICS_BINDING_OPENGL_WIN32_KHR };
-    m_window = .init(m_colorFormat, m_depthFormat, m_sampleCount, 640, 480, false);
-    if (!m_window.create()) {
-        @panic("Unable to create GL context");
-    }
+pub fn destroy(this: *@This()) void {
+    this.context.destroy();
 
-    m_graphicsBinding.hDC = m_window.context.hDC;
-    m_graphicsBinding.hGLRC = m_window.context.hGLRC;
+    //     if (this.windowFullscreen) {
+    //         ChangeDisplaySettingsA(null, 0);
+    //         ShowCursor(TRUE);
+    //     }
+
+    //     if (this.hDC) {
+    //         if (!ReleaseDC(this.hWnd, this.hDC)) {
+    //             Error("Failed to release device context.");
+    //         }
+    //         this.hDC = null;
+    //     }
+
+    //     if (this.hWnd) {
+    //         if (!DestroyWindow(this.hWnd)) {
+    //             Error("Failed to destroy the this.");
+    //         }
+    //         this.hWnd = null;
+    //     }
+    //
+    //     if (this.hInstance) {
+    //         if (!UnregisterClassA(APPLICATION_NAME, this.hInstance)) {
+    //             Error("Failed to unregister window class.");
+    //         }
+    //         this.hInstance = null;
+    //     }
+
+    this.allocator.destroy(this);
+}
+
+// APIENTRY
+export fn WndProc(hWnd: c.HWND, message: c.UINT, wParam: c.WPARAM, lParam: c.LPARAM) c.LRESULT {
+    //     ksGpuWindow* window = (ksGpuWindow*)GetWindowLongPtrA(hWnd, GWLP_USERDATA);
+    //
+    //     switch (message) {
+    //         case WM_SIZE: {
+    //             if (window != null) {
+    //                 window.windowWidth = (int)LOWORD(lParam);
+    //                 window.windowHeight = (int)HIWORD(lParam);
+    //             }
+    //             return 0;
+    //         }
+    //         case WM_ACTIVATE: {
+    //             if (window != null) {
+    //                 window.windowActiveState = !HIWORD(wParam);
+    //             }
+    //             return 0;
+    //         }
+    //         case WM_ERASEBKGND: {
+    //             return 0;
+    //         }
+    //         case WM_CLOSE: {
+    //             PostQuitMessage(0);
+    //             return 0;
+    //         }
+    //         case WM_KEYDOWN: {
+    //             if (window != null) {
+    //                 if ((int)wParam >= 0 && (int)wParam < 256) {
+    //                     if ((int)wParam != KEY_SHIFT_LEFT && (int)wParam != KEY_CTRL_LEFT && (int)wParam != KEY_ALT_LEFT &&
+    //                         (int)wParam != KEY_CURSOR_UP && (int)wParam != KEY_CURSOR_DOWN && (int)wParam != KEY_CURSOR_LEFT &&
+    //                         (int)wParam != KEY_CURSOR_RIGHT) {
+    //                         window.input.keyInput[(int)wParam] = true;
+    //                     }
+    //                 }
+    //             }
+    //             break;
+    //         }
+    //         case WM_LBUTTONDOWN: {
+    //             window.input.mouseInput[MOUSE_LEFT] = true;
+    //             window.input.mouseInputX[MOUSE_LEFT] = LOWORD(lParam);
+    //             window.input.mouseInputY[MOUSE_LEFT] = window.windowHeight - HIWORD(lParam);
+    //             break;
+    //         }
+    //         case WM_RBUTTONDOWN: {
+    //             window.input.mouseInput[MOUSE_RIGHT] = true;
+    //             window.input.mouseInputX[MOUSE_RIGHT] = LOWORD(lParam);
+    //             window.input.mouseInputY[MOUSE_RIGHT] = window.windowHeight - HIWORD(lParam);
+    //             break;
+    //         }
+    //     }
+    return c.DefWindowProcA(hWnd, message, wParam, lParam);
 }

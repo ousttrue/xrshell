@@ -13,6 +13,7 @@ const gfx = if (builtin.os.tag == .windows)
 else
     @import("gfx/graphicsplugin_opengles.zig");
 const geometry = @import("geometry.zig");
+const Window = @import("window/window.zig").Window;
 
 pub const std_options: std.Options = .{
     .logFn = console_color_logger.logFn,
@@ -67,6 +68,15 @@ fn run_instance(
     const blend_mode = try instance.getPreferredBlendMode(view_config_type);
     try instance.logViewConfigurations(view_config_type, blend_mode);
 
+    const window = Window.create(allocator);
+    defer window.destroy();
+
+    var binding: c.XrGraphicsBindingOpenGLWin32KHR = .{
+        .type = c.XR_TYPE_GRAPHICS_BINDING_OPENGL_WIN32_KHR,
+        .hDC = window.context.hDC,
+        .hGLRC = window.context.hGLRC,
+    };
+
     gfx.init(allocator);
     try gfx.InitializeDevice(instance.instance, instance.systemId);
     defer gfx.deinit(allocator);
@@ -75,7 +85,7 @@ fn run_instance(
         allocator,
         instance.instance,
         instance.systemId,
-        gfx.GetGraphicsBinding(),
+        @ptrCast(&binding),
     );
     defer session.deinit();
 
