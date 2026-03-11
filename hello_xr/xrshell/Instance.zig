@@ -118,7 +118,7 @@ pub fn deinit(this: *@This()) void {
 }
 
 pub fn logViewConfigurations(
-    this: *@This(),
+    this: *const @This(),
     view_config_type: c.XrViewConfigurationType,
     blend_mode: c.XrEnvironmentBlendMode,
 ) XrError!void {
@@ -200,12 +200,12 @@ pub fn logViewConfigurations(
             std.log.err("Empty view configuration type", .{});
         }
 
-        try this.logEnvironmentBlendMode(viewConfigType, blend_mode);
+        try this.logEnvironmentBlendMode(view_config_type, blend_mode);
     }
 }
 
 fn logEnvironmentBlendMode(
-    this: *@This(),
+    this: *const @This(),
     view_config_type: c.XrViewConfigurationType,
     blend_mode: c.XrEnvironmentBlendMode,
 ) XrError!void {
@@ -242,7 +242,7 @@ fn logEnvironmentBlendMode(
     std.debug.assert(blendModeFound);
 }
 
-pub fn getPreferredBlendMode(this: *@This(), view_config_type: c.XrViewConfigurationType) !c.XrEnvironmentBlendMode {
+pub fn getPreferredBlendMode(this: *const @This(), view_config_type: c.XrViewConfigurationType) !c.XrEnvironmentBlendMode {
     var count: u32 = undefined;
     _ = try XrResult.init(c.xrEnumerateEnvironmentBlendModes(
         this.instance,
