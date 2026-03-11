@@ -8,10 +8,7 @@ const xrs = @import("xrshell/xrshell.zig");
 const XrError = xrs.XrError;
 const XrResult = xrs.XrResult;
 const c = @import("c");
-const Cube = @import("Cube.zig");
-const geometry = @import("geometry.zig");
 const Options = @import("Options.zig");
-const Renderer = @import("gfx/RendererOpenGL4.zig");
 
 const Swapchain = struct {
     handle: c.XrSwapchain,
@@ -279,57 +276,52 @@ pub fn CreateSwapchains(this: *@This(), view_config_type: c.XrViewConfigurationT
     }
 }
 
-pub fn renderView(
-    this: *@This(),
-    i: usize,
-    blend_mode: c.XrEnvironmentBlendMode,
-    cubes: []const Cube,
-    renderer: *Renderer,
-) !c.XrCompositionLayerProjectionView {
-    const viewSwapchain = this.swapchains.items[i];
-    // std.debug.assert(viewCountOutput == viewCapacityInput);
-    // std.debug.assert(viewCountOutput == m_configViews.items.len);
-    // std.debug.assert(viewCountOutput == m_swapchains.items.len);
+pub const AcquireInfo = struct {
+    projection_layer_view: c.XrCompositionLayerProjectionView,
+    handle: c.XrSwapchain,
+    swapchain_image: *c.XrSwapchainImageBaseHeader,
+};
+
+pub fn acquireSwapchain(this: *@This(), view_index: usize) !AcquireInfo {
+    const swapchain = this.swapchains.items[view_index];
 
     // Render view to the appropriate part of the swapchain image.
     // Each view has a separate swapchain which is acquired, rendered to, and released.
     var acquireInfo: c.XrSwapchainImageAcquireInfo = .{ .type = c.XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO };
     var swapchainImageIndex: u32 = undefined;
-    _ = try XrResult.init(c.xrAcquireSwapchainImage(viewSwapchain.handle, &acquireInfo, &swapchainImageIndex));
+    _ = try XrResult.init(c.xrAcquireSwapchainImage(swapchain.handle, &acquireInfo, &swapchainImageIndex));
 
     var waitInfo: c.XrSwapchainImageWaitInfo = .{
         .type = c.XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO,
         .timeout = c.XR_INFINITE_DURATION,
     };
-    _ = try XrResult.init(c.xrWaitSwapchainImage(viewSwapchain.handle, &waitInfo));
+    _ = try XrResult.init(c.xrWaitSwapchainImage(swapchain.handle, &waitInfo));
 
-    const projectionLayerView: c.XrCompositionLayerProjectionView = .{
-        .type = c.XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW,
-        .pose = this.views.items[i].pose,
-        .fov = this.views.items[i].fov,
-        .subImage = .{
-            .swapchain = viewSwapchain.handle,
-            .imageRect = .{
-                .offset = .{ .x = 0, .y = 0 },
-                .extent = .{ .width = @intCast(viewSwapchain.width), .height = @intCast(viewSwapchain.height) },
+    const entry = this.swapchainImages.get(swapchain.handle).?;
+    const swapchainImage: *c.XrSwapchainImageBaseHeader = entry[swapchainImageIndex];
+
+    return .{
+        .projection_layer_view = .{
+            .type = c.XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW,
+            .pose = this.views.items[view_index].pose,
+            .fov = this.views.items[view_index].fov,
+            .subImage = .{
+                .swapchain = swapchain.handle,
+                .imageRect = .{
+                    .offset = .{ .x = 0, .y = 0 },
+                    .extent = .{ .width = @intCast(swapchain.width), .height = @intCast(swapchain.height) },
+                },
             },
         },
+        .handle = swapchain.handle,
+        .swapchain_image = swapchainImage,
     };
+}
 
-    const entry = this.swapchainImages.get(viewSwapchain.handle).?;
-    const swapchainImage: *c.XrSwapchainImageBaseHeader = entry[swapchainImageIndex];
-    try renderer.renderView(
-        &projectionLayerView,
-        swapchainImage,
-        this.colorSwapchainFormat,
-        Options.GetBackgroundClearColor(blend_mode),
-        cubes,
-    );
-
+pub fn releaseSwapchain(this: *@This(), handle: c.XrSwapchain) !void {
+    _ = this;
     var releaseInfo: c.XrSwapchainImageReleaseInfo = .{ .type = c.XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO };
-    _ = try XrResult.init(c.xrReleaseSwapchainImage(viewSwapchain.handle, &releaseInfo));
-
-    return projectionLayerView;
+    _ = try XrResult.init(c.xrReleaseSwapchainImage(handle, &releaseInfo));
 }
 
 pub fn endFrame(

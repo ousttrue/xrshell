@@ -12,7 +12,6 @@ const console_color_logger = @import("console_color_logger.zig");
 //     @import("gfx/graphicsplugin_opengl.zig")
 // else
 //     @import("gfx/graphicsplugin_opengles.zig");
-const geometry = @import("geometry.zig");
 const Window = @import("window/window.zig").Window;
 const Renderer = @import("gfx/RendererOpenGL4.zig");
 
@@ -125,27 +124,39 @@ fn run_instance(
             .next => {
                 if (isSessionRunning) {
                     try action.pollActions();
-
+                    //
+                    // begin frame !
+                    //
                     const frameState = try prog.beginFrame();
-
                     var layer: ?c.XrCompositionLayerProjection = null;
                     if (frameState.shouldRender == c.XR_TRUE) {
                         if (try prog.locate(frameState.predictedDisplayTime, view_config_type)) {
+                            //
+                            // render
+                            //
                             const cubes = try action.update(prog.appSpace, frameState.predictedDisplayTime);
                             try projectionLayerViews.resize(allocator, prog.views.items.len);
                             for (0..prog.swapchains.items.len) |i| {
-                                projectionLayerViews.items[i] = try prog.renderView(
-                                    i,
-                                    blend_mode,
+                                const acquired = try prog.acquireSwapchain(i);
+                                projectionLayerViews.items[i] = acquired.projection_layer_view;
+
+                                try renderer.renderView(
+                                    &acquired.projection_layer_view,
+                                    acquired.swapchain_image,
+                                    prog.colorSwapchainFormat,
+                                    Options.GetBackgroundClearColor(blend_mode),
                                     cubes,
-                                    &renderer,
                                 );
+
+                                try prog.releaseSwapchain(acquired.handle);
                             }
+                            // composition layer
                             layer = .{
                                 .type = c.XR_TYPE_COMPOSITION_LAYER_PROJECTION,
                                 .space = prog.appSpace,
                                 .layerFlags = if (blend_mode == c.XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND)
-                                    c.XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT | c.XR_COMPOSITION_LAYER_UNPREMULTIPLIED_ALPHA_BIT
+                                    c.XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT |
+                                        c.XR_COMPOSITION_LAYER_UNPREMULTIPLIED_ALPHA_BIT
                                 else
                                     0,
                                 .viewCount = @intCast(projectionLayerViews.items.len),
@@ -153,6 +164,7 @@ fn run_instance(
                             };
                         }
                     }
+                    // composition !
                     try prog.endFrame(frameState.predictedDisplayTime, blend_mode, if (layer) |*l|
                         @ptrCast(l)
                     else
