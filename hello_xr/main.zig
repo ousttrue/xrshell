@@ -8,12 +8,13 @@ const OpenXrProgram = @import("OpenXrProgram.zig");
 const Options = @import("Options.zig");
 const QuitKeyObserver = @import("QuitKeyObserver.zig");
 const console_color_logger = @import("console_color_logger.zig");
-const gfx = if (builtin.os.tag == .windows)
-    @import("gfx/graphicsplugin_opengl.zig")
-else
-    @import("gfx/graphicsplugin_opengles.zig");
+// const gfx = if (builtin.os.tag == .windows)
+//     @import("gfx/graphicsplugin_opengl.zig")
+// else
+//     @import("gfx/graphicsplugin_opengles.zig");
 const geometry = @import("geometry.zig");
 const Window = @import("window/window.zig").Window;
+const Renderer = @import("gfx/RendererOpenGL4.zig");
 
 pub const std_options: std.Options = .{
     .logFn = console_color_logger.logFn,
@@ -33,6 +34,17 @@ pub fn main() !void {
 
     const options: Options = try .init(std.os.argv);
 
+    const gfx_extensions = [_][*:0]const u8{
+        c.XR_KHR_OPENGL_ENABLE_EXTENSION_NAME,
+    };
+    const window = Window.create(allocator);
+    defer window.destroy();
+    var gfx_binding: c.XrGraphicsBindingOpenGLWin32KHR = .{
+        .type = c.XR_TYPE_GRAPHICS_BINDING_OPENGL_WIN32_KHR,
+        .hDC = window.context.hDC,
+        .hGLRC = window.context.hGLRC,
+    };
+
     while (!quit_key.quitKeyPressed) {
         std.log.warn("New instance", .{});
 
@@ -42,6 +54,8 @@ pub fn main() !void {
             options.FormFactor,
             options.ViewConfigType,
             options.AppSpace,
+            &gfx_extensions,
+            @ptrCast(&gfx_binding),
         );
         switch (next) {
             .quit => break,
@@ -56,36 +70,25 @@ fn run_instance(
     form_factor: c.XrFormFactor,
     view_config_type: c.XrViewConfigurationType,
     app_space: Options.ReferenceSpaceType,
+    gfx_extensions: []const [*:0]const u8,
+    gfx_binding: *c.XrBaseInStructure,
 ) !enum {
     quit,
     restart,
 } {
     var instance = try xrs.Instance.init(allocator, .{
-        .gfx_extensions = gfx.GetInstanceExtensions(),
+        .gfx_extensions = gfx_extensions,
         .form_factor = form_factor,
     });
     defer instance.deinit();
     const blend_mode = try instance.getPreferredBlendMode(view_config_type);
     try instance.logViewConfigurations(view_config_type, blend_mode);
 
-    const window = Window.create(allocator);
-    defer window.destroy();
-
-    var binding: c.XrGraphicsBindingOpenGLWin32KHR = .{
-        .type = c.XR_TYPE_GRAPHICS_BINDING_OPENGL_WIN32_KHR,
-        .hDC = window.context.hDC,
-        .hGLRC = window.context.hGLRC,
-    };
-
-    gfx.init(allocator);
-    try gfx.InitializeDevice(instance.instance, instance.systemId);
-    defer gfx.deinit(allocator);
-
     var session = try xrs.Session.init(
         allocator,
         instance.instance,
         instance.systemId,
-        @ptrCast(&binding),
+        gfx_binding,
     );
     defer session.deinit();
 
@@ -101,6 +104,10 @@ fn run_instance(
         app_space,
     );
     defer prog.deinit();
+
+    // renderer
+    var renderer: Renderer = .init(allocator);
+    defer renderer.deinit();
 
     var isSessionRunning = false;
     std.log.warn("Loop start", .{});
@@ -124,6 +131,7 @@ fn run_instance(
                             layer = try prog.renderLayer(
                                 blend_mode,
                                 cubes,
+                                &renderer,
                             );
                         }
                     }

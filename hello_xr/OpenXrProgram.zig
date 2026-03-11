@@ -11,6 +11,7 @@ const c = @import("c");
 const Cube = @import("Cube.zig");
 const geometry = @import("geometry.zig");
 const Options = @import("Options.zig");
+const Renderer = @import("gfx/RendererOpenGL4.zig");
 
 const Swapchain = struct {
     handle: c.XrSwapchain,
@@ -260,6 +261,7 @@ pub fn renderLayer(
     this: *@This(),
     blend_mode: c.XrEnvironmentBlendMode,
     cubes: []const Cube,
+    renderer: *Renderer,
 ) !*c.XrCompositionLayerBaseHeader {
     // std.debug.assert(viewCountOutput == viewCapacityInput);
     // std.debug.assert(viewCountOutput == m_configViews.items.len);
@@ -295,7 +297,7 @@ pub fn renderLayer(
 
         const entry = this.swapchainImages.get(viewSwapchain.handle).?;
         const swapchainImage: *c.XrSwapchainImageBaseHeader = entry[swapchainImageIndex];
-        try gfx.renderView(
+        try renderer.renderView(
             &this.projectionLayerViews.items[i],
             swapchainImage,
             this.colorSwapchainFormat,
