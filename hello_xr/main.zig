@@ -44,7 +44,7 @@ pub fn main() !void {
             options.ViewConfigType,
             options.AppSpace,
             &gfx.extensions,
-            gfx.makeBinding(window.context.hDC, window.context.hGLRC),
+            gfx.makeBinding(window.context),
         );
         switch (next) {
             .quit => break,
@@ -138,21 +138,19 @@ fn run_instance(
     for (stereo_view.swapchains.items) |swapchain| {
         var imageCount: u32 = undefined;
         _ = try XrResult.init(c.xrEnumerateSwapchainImages(swapchain.handle, 0, &imageCount, null));
-
-        const swapchainImageBase = try allocator.alloc(*c.XrSwapchainImageBaseHeader, imageCount);
         const swapchainImageBuffer = try allocator.alloc(@TypeOf(gfx.swapchain_image), imageCount);
+        const swapchainImageBase = try allocator.alloc(*c.XrSwapchainImageBaseHeader, imageCount);
         for (swapchainImageBase, swapchainImageBuffer) |*base, *buf| {
             base.* = @ptrCast(buf);
             buf.* = gfx.swapchain_image;
         }
-
         _ = try XrResult.init(c.xrEnumerateSwapchainImages(
             swapchain.handle,
-            imageCount,
+            @intCast(swapchainImageBuffer.len),
             &imageCount,
-            swapchainImageBase[0],
+            @ptrCast(swapchainImageBuffer.ptr),
         ));
-        // Keep the buffer alive by moving it into the list of buffers.
+        // Keep the buffer alive
         try swapchainImages.append(allocator, swapchainImageBase);
         try swapchainImageBuffers.append(allocator, swapchainImageBuffer);
     }
@@ -199,10 +197,11 @@ fn run_instance(
 
                                 const entry = swapchainImages.items[i];
                                 const swapchain_image = entry[acquired.swapchainImageIndex];
+                                const color_texture = @as(*const @TypeOf(gfx.swapchain_image), @ptrCast(swapchain_image)).image;
 
                                 try renderer.renderView(
                                     &acquired.projection_layer_view,
-                                    swapchain_image,
+                                    color_texture,
                                     stereo_view.colorSwapchainFormat,
                                     xrs.Options.GetBackgroundClearColor(blend_mode),
                                     cubes,

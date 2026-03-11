@@ -200,7 +200,7 @@ fn getDepthTexture(this: *@This(), colorTexture: u32) !u32 {
 pub fn renderView(
     this: *@This(),
     layerView: *const c.XrCompositionLayerProjectionView,
-    swapchainImage: *const c.XrSwapchainImageBaseHeader,
+    colorTexture: u32,
     swapchainFormat: i64,
     clear_color: [4]f32,
     cubes: []const Cube,
@@ -209,8 +209,6 @@ pub fn renderView(
     std.debug.assert(layerView.subImage.imageArrayIndex == 0); // Texture arrays not supported.
 
     c.glBindFramebuffer(c.GL_FRAMEBUFFER, this.swapchainFramebuffer);
-
-    const colorTexture = @as(*const c.XrSwapchainImageOpenGLKHR, @ptrCast(swapchainImage)).image;
 
     c.glViewport(
         layerView.subImage.imageRect.offset.x,
