@@ -462,9 +462,9 @@ pub fn create(
 
     _ = c.gladLoaderLoadGL();
 
-    _ = c.ShowWindow(this.hWnd, c.SW_SHOW);
-    _ = c.SetForegroundWindow(this.hWnd);
-    _ = c.SetFocus(this.hWnd);
+    // _ = c.ShowWindow(this.hWnd, c.SW_SHOW);
+    // _ = c.SetForegroundWindow(this.hWnd);
+    // _ = c.SetFocus(this.hWnd);
 
     return this;
 }

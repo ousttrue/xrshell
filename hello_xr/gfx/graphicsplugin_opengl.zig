@@ -14,12 +14,12 @@ pub const swapchain_image: c.XrSwapchainImageOpenGLKHR = .{
     .type = c.XR_TYPE_SWAPCHAIN_IMAGE_OPENGL_KHR,
 };
 
-pub fn makeBinding(hDC: c.HDC, hGLRC: c.HGLRC) Binding {
+pub fn makeBinding(window: anytype) Binding {
     return .{
         .type = c.XR_TYPE_GRAPHICS_BINDING_OPENGL_WIN32_KHR,
         .next = null,
-        .hDC = hDC,
-        .hGLRC = hGLRC,
+        .hDC = window.hDC,
+        .hGLRC = window.hGLRC,
     };
 }
 
