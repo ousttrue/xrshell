@@ -1,9 +1,5 @@
 const std = @import("std");
 const builtin = @import("builtin");
-const gfx = if (builtin.os.tag == .windows)
-    @import("gfx/graphicsplugin_opengl.zig")
-else
-    @import("gfx/graphicsplugin_opengles.zig");
 const xrs = @import("xrshell/xrshell.zig");
 const XrError = xrs.XrError;
 const XrResult = xrs.XrResult;
@@ -24,29 +20,9 @@ appSpace: c.XrSpace = null,
 
 swapchains: std.ArrayList(Swapchain) = .{},
 configViews: std.ArrayList(c.XrViewConfigurationView) = .{},
-swapchainImages: std.AutoHashMap(c.XrSwapchain, []*c.XrSwapchainImageBaseHeader),
 views: std.ArrayList(c.XrView) = .{},
-colorSwapchainFormat: i64 = -1,
-
-swapchainImageBuffers: std.ArrayList([]@TypeOf(gfx.swapchain_image)) = .{},
-fn allocateSwapchainImageStructs(
-    this: *@This(),
-    swapchainImageBase: []*c.XrSwapchainImageBaseHeader,
-) !void {
-    // Allocate and initialize the buffer of image structs
-    // (must be sequential in memory for xrEnumerateSwapchainImages).
-    // Return back an array of pointers to each swapchain image struct
-    // so the consumer doesn't need to know the type/size.
-    const swapchainImageBuffer = try this.allocator.alloc(@TypeOf(gfx.swapchain_image), swapchainImageBase.len);
-    for (swapchainImageBuffer) |*buf| {
-        buf.* = gfx.swapchain_image;
-    }
-    for (swapchainImageBuffer, 0..) |*buf, i| {
-        swapchainImageBase[i] = @ptrCast(buf);
-    }
-    // Keep the buffer alive by moving it into the list of buffers.
-    try this.swapchainImageBuffers.append(this.allocator, swapchainImageBuffer);
-}
+colorSwapchainFormat: i64,
+sampleCount: u32,
 
 pub fn init(
     allocator: std.mem.Allocator,
@@ -54,6 +30,8 @@ pub fn init(
     systemId: c.XrSystemId,
     session: c.XrSession,
     view_config_type: c.XrViewConfigurationType,
+    colorSwapchainFormat: i64,
+    sampleCount: u32,
     app_space: Options.ReferenceSpaceType,
 ) !@This() {
     std.log.info("## OpenXrProgram.init ##", .{});
@@ -63,7 +41,8 @@ pub fn init(
         .instance = instance,
         .systemId = systemId,
         .session = session,
-        .swapchainImages = .init(allocator),
+        .colorSwapchainFormat = colorSwapchainFormat,
+        .sampleCount = sampleCount,
     };
 
     const referenceSpaceCreateInfo = app_space.makeXrReferenceSpaceCreateInfo();
@@ -77,19 +56,6 @@ pub fn init(
 pub fn deinit(this: *@This()) void {
     std.log.info("## OpenXrProgram.deinit ##", .{});
 
-    for (this.swapchainImageBuffers.items) |image| {
-        this.allocator.free(image);
-    }
-    this.swapchainImageBuffers.deinit(this.allocator);
-
-    {
-        var it = this.swapchainImages.iterator();
-        while (it.next()) |item| {
-            this.allocator.free(item.value_ptr.*);
-        }
-        this.swapchainImages.deinit();
-    }
-
     this.configViews.deinit(this.allocator);
 
     for (this.swapchains.items) |swapchain| {
@@ -99,9 +65,9 @@ pub fn deinit(this: *@This()) void {
 
     this.views.deinit(this.allocator);
 
-    //     //     if (m_appSpace != XR_NULL_HANDLE) {
-    //     //         xrDestroySpace(m_appSpace);
-    //     //     }
+    if (this.appSpace != null) {
+        _ = c.xrDestroySpace(this.appSpace);
+    }
 }
 
 fn makeIndent(allocator: std.mem.Allocator, indent: usize) ![]const u8 {
@@ -140,7 +106,10 @@ fn logExtensions(allocator: std.mem.Allocator, _layerName: []const u8, indent: u
 
 var version_str: [64]u8 = undefined;
 
-pub fn CreateSwapchains(this: *@This(), view_config_type: c.XrViewConfigurationType) XrError!void {
+pub fn CreateSwapchains(
+    this: *@This(),
+    view_config_type: c.XrViewConfigurationType,
+) XrError!void {
     // Read graphics properties for preferred swapchain length and logging.
     var systemProperties: c.XrSystemProperties = .{ .type = c.XR_TYPE_SYSTEM_PROPERTIES };
     _ = try XrResult.init(c.xrGetSystemProperties(this.instance, this.systemId, &systemProperties));
@@ -193,93 +162,43 @@ pub fn CreateSwapchains(this: *@This(), view_config_type: c.XrViewConfigurationT
         item.* = .{ .type = c.XR_TYPE_VIEW };
     }
 
-    // Create the swapchain and get the images.
-    if (viewCount > 0) {
-        // Select a swapchain format.
-        var swapchainFormatCount: u32 = undefined;
-        _ = try XrResult.init(c.xrEnumerateSwapchainFormats(this.session, 0, &swapchainFormatCount, null));
-        const swapchainFormats = try this.allocator.alloc(i64, swapchainFormatCount);
-        defer this.allocator.free(swapchainFormats);
-        _ = try XrResult.init(c.xrEnumerateSwapchainFormats(
-            this.session,
-            @intCast(swapchainFormats.len),
-            &swapchainFormatCount,
-            swapchainFormats.ptr,
-        ));
-        std.debug.assert(swapchainFormatCount == swapchainFormats.len);
-        this.colorSwapchainFormat = try gfx.SelectColorSwapchainFormat(this.allocator, swapchainFormats);
+    // Create a swapchain for each view.
+    for (this.configViews.items, 0..) |vp, i| {
+        std.log.debug("Creating swapchain for view {} with dimensions Width={} Height={} SampleCount={}", .{
+            i,
+            vp.recommendedImageRectWidth,
+            vp.recommendedImageRectHeight,
+            vp.recommendedSwapchainSampleCount,
+        });
 
-        // Print swapchain formats and the selected one.
-        {
-            // const swapchainFormatsString: []const u8 = "";
-            var out = std.Io.Writer.Allocating.init(this.allocator);
-            defer out.deinit();
-            // std.io.Writer を値渡しすると壊れる
-            var w: *std.io.Writer = &out.writer;
+        // Create the swapchain.
+        var swapchainCreateInfo: c.XrSwapchainCreateInfo = .{
+            .type = c.XR_TYPE_SWAPCHAIN_CREATE_INFO,
+            .arraySize = 1,
+            .format = this.colorSwapchainFormat,
+            .width = vp.recommendedImageRectWidth,
+            .height = vp.recommendedImageRectHeight,
+            .mipCount = 1,
+            .faceCount = 1,
+            .sampleCount = this.sampleCount,
+            .usageFlags = c.XR_SWAPCHAIN_USAGE_SAMPLED_BIT | c.XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT,
+        };
 
-            for (swapchainFormats) |format| {
-                const selected = format == this.colorSwapchainFormat;
-                w.writeAll(" ") catch @panic("OOM");
-                if (selected) {
-                    w.writeAll("[") catch @panic("OOM");
-                }
-                w.print("{}", .{format}) catch @panic("OM");
-                if (selected) {
-                    w.writeAll("]") catch @panic("OOM");
-                }
-            }
-            const str = out.toOwnedSlice() catch @panic("OOM");
-            defer this.allocator.free(str);
-            std.log.debug("Swapchain Formats: {s}", .{str});
-        }
+        var swapchain: Swapchain = .{
+            .handle = null,
+            .width = swapchainCreateInfo.width,
+            .height = swapchainCreateInfo.height,
+        };
+        _ = try XrResult.init(c.xrCreateSwapchain(this.session, &swapchainCreateInfo, &swapchain.handle));
 
-        // Create a swapchain for each view.
-        for (this.configViews.items, 0..) |vp, i| {
-            std.log.debug("Creating swapchain for view {} with dimensions Width={} Height={} SampleCount={}", .{
-                i,
-                vp.recommendedImageRectWidth,
-                vp.recommendedImageRectHeight,
-                vp.recommendedSwapchainSampleCount,
-            });
-
-            // Create the swapchain.
-            var swapchainCreateInfo: c.XrSwapchainCreateInfo = .{
-                .type = c.XR_TYPE_SWAPCHAIN_CREATE_INFO,
-                .arraySize = 1,
-                .format = this.colorSwapchainFormat,
-                .width = vp.recommendedImageRectWidth,
-                .height = vp.recommendedImageRectHeight,
-                .mipCount = 1,
-                .faceCount = 1,
-                .sampleCount = gfx.GetSupportedSwapchainSampleCount(&vp),
-                .usageFlags = c.XR_SWAPCHAIN_USAGE_SAMPLED_BIT | c.XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT,
-            };
-
-            var swapchain: Swapchain = .{
-                .handle = null,
-                .width = swapchainCreateInfo.width,
-                .height = swapchainCreateInfo.height,
-            };
-            _ = try XrResult.init(c.xrCreateSwapchain(this.session, &swapchainCreateInfo, &swapchain.handle));
-
-            try this.swapchains.append(this.allocator, swapchain);
-
-            var imageCount: u32 = undefined;
-            _ = try XrResult.init(c.xrEnumerateSwapchainImages(swapchain.handle, 0, &imageCount, null));
-            // XXX This should really just return XrSwapchainImageBaseHeader*
-            const swapchainImages = try this.allocator.alloc(*c.XrSwapchainImageBaseHeader, imageCount);
-            try this.allocateSwapchainImageStructs(swapchainImages);
-            _ = try XrResult.init(c.xrEnumerateSwapchainImages(swapchain.handle, imageCount, &imageCount, swapchainImages[0]));
-
-            try this.swapchainImages.put(swapchain.handle, swapchainImages);
-        }
+        try this.swapchains.append(this.allocator, swapchain);
     }
 }
 
 pub const AcquireInfo = struct {
-    projection_layer_view: c.XrCompositionLayerProjectionView,
     handle: c.XrSwapchain,
-    swapchain_image: *c.XrSwapchainImageBaseHeader,
+    swapchainImageIndex: u32,
+    projection_layer_view: c.XrCompositionLayerProjectionView,
 };
 
 pub fn acquireSwapchain(this: *@This(), view_index: usize) !AcquireInfo {
@@ -297,10 +216,9 @@ pub fn acquireSwapchain(this: *@This(), view_index: usize) !AcquireInfo {
     };
     _ = try XrResult.init(c.xrWaitSwapchainImage(swapchain.handle, &waitInfo));
 
-    const entry = this.swapchainImages.get(swapchain.handle).?;
-    const swapchainImage: *c.XrSwapchainImageBaseHeader = entry[swapchainImageIndex];
-
     return .{
+        .handle = swapchain.handle,
+        .swapchainImageIndex = swapchainImageIndex,
         .projection_layer_view = .{
             .type = c.XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW,
             .pose = this.views.items[view_index].pose,
@@ -313,8 +231,6 @@ pub fn acquireSwapchain(this: *@This(), view_index: usize) !AcquireInfo {
                 },
             },
         },
-        .handle = swapchain.handle,
-        .swapchain_image = swapchainImage,
     };
 }
 

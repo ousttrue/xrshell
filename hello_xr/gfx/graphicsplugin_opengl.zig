@@ -28,6 +28,6 @@ pub const swapchain_image: c.XrSwapchainImageOpenGLKHR = .{
     .type = c.XR_TYPE_SWAPCHAIN_IMAGE_OPENGL_KHR,
 };
 
-pub fn GetSupportedSwapchainSampleCount(_: *const c.XrViewConfigurationView) u32 {
+pub fn GetSupportedSwapchainSampleCount() u32 {
     return 1;
 }

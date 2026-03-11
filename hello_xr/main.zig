@@ -8,10 +8,10 @@ const OpenXrProgram = @import("OpenXrProgram.zig");
 const Options = @import("Options.zig");
 const QuitKeyObserver = @import("QuitKeyObserver.zig");
 const console_color_logger = @import("console_color_logger.zig");
-// const gfx = if (builtin.os.tag == .windows)
-//     @import("gfx/graphicsplugin_opengl.zig")
-// else
-//     @import("gfx/graphicsplugin_opengles.zig");
+const gfx = if (builtin.os.tag == .windows)
+    @import("gfx/graphicsplugin_opengl.zig")
+else
+    @import("gfx/graphicsplugin_opengles.zig");
 const Window = @import("window/window.zig").Window;
 const Renderer = @import("gfx/RendererOpenGL4.zig");
 
@@ -91,6 +91,32 @@ fn run_instance(
     );
     defer session.deinit();
 
+    // Select a swapchain format.
+    const colorSwapchainFormat = try gfx.SelectColorSwapchainFormat(allocator, session.swapchainFormats);
+    // Print swapchain formats and the selected one.
+    {
+        // const swapchainFormatsString: []const u8 = "";
+        var out = std.Io.Writer.Allocating.init(allocator);
+        defer out.deinit();
+        // std.io.Writer を値渡しすると壊れる
+        var w: *std.io.Writer = &out.writer;
+
+        for (session.swapchainFormats) |format| {
+            const selected = format == colorSwapchainFormat;
+            w.writeAll(" ") catch @panic("OOM");
+            if (selected) {
+                w.writeAll("[") catch @panic("OOM");
+            }
+            w.print("{}", .{format}) catch @panic("OM");
+            if (selected) {
+                w.writeAll("]") catch @panic("OOM");
+            }
+        }
+        const str = out.toOwnedSlice() catch @panic("OOM");
+        defer allocator.free(str);
+        std.log.debug("Swapchain Formats: {s}", .{str});
+    }
+
     var action = try xrs.Action.init(allocator, instance.instance, session.session);
     defer action.deinit();
 
@@ -100,9 +126,44 @@ fn run_instance(
         instance.systemId,
         session.session,
         view_config_type,
+        colorSwapchainFormat,
+        gfx.GetSupportedSwapchainSampleCount(),
         app_space,
     );
     defer prog.deinit();
+    var swapchainImageBuffers: std.ArrayList([]@TypeOf(gfx.swapchain_image)) = .{};
+    var swapchainImages: std.ArrayList([]*c.XrSwapchainImageBaseHeader) = .{};
+    defer {
+        for (swapchainImageBuffers.items) |image| {
+            allocator.free(image);
+        }
+        swapchainImageBuffers.deinit(allocator);
+        for (swapchainImages.items) |image| {
+            allocator.free(image);
+        }
+        swapchainImages.deinit(allocator);
+    }
+    for (prog.swapchains.items) |swapchain| {
+        var imageCount: u32 = undefined;
+        _ = try XrResult.init(c.xrEnumerateSwapchainImages(swapchain.handle, 0, &imageCount, null));
+
+        const swapchainImageBase = try allocator.alloc(*c.XrSwapchainImageBaseHeader, imageCount);
+        const swapchainImageBuffer = try allocator.alloc(@TypeOf(gfx.swapchain_image), imageCount);
+        for (swapchainImageBase, swapchainImageBuffer) |*base, *buf| {
+            base.* = @ptrCast(buf);
+            buf.* = gfx.swapchain_image;
+        }
+
+        _ = try XrResult.init(c.xrEnumerateSwapchainImages(
+            swapchain.handle,
+            imageCount,
+            &imageCount,
+            swapchainImageBase[0],
+        ));
+        // Keep the buffer alive by moving it into the list of buffers.
+        try swapchainImages.append(allocator, swapchainImageBase);
+        try swapchainImageBuffers.append(allocator, swapchainImageBuffer);
+    }
 
     var projectionLayerViews: std.ArrayList(c.XrCompositionLayerProjectionView) = .{};
     defer projectionLayerViews.deinit(allocator);
@@ -140,9 +201,12 @@ fn run_instance(
                                 const acquired = try prog.acquireSwapchain(i);
                                 projectionLayerViews.items[i] = acquired.projection_layer_view;
 
+                                const entry = swapchainImages.items[i];
+                                const swapchain_image = entry[acquired.swapchainImageIndex];
+
                                 try renderer.renderView(
                                     &acquired.projection_layer_view,
-                                    acquired.swapchain_image,
+                                    swapchain_image,
                                     prog.colorSwapchainFormat,
                                     Options.GetBackgroundClearColor(blend_mode),
                                     cubes,

@@ -7,6 +7,7 @@ const xr_util = @import("xr_util.zig");
 
 allocator: std.mem.Allocator,
 session: c.XrSession = null,
+swapchainFormats: []i64 = &.{},
 
 pub fn init(
     allocator: std.mem.Allocator,
@@ -47,6 +48,16 @@ pub fn init(
     };
     _ = try XrResult.init(c.xrCreateSession(instance, &createInfo, &this.session));
 
+    var swapchainFormatCount: u32 = undefined;
+    _ = try XrResult.init(c.xrEnumerateSwapchainFormats(this.session, 0, &swapchainFormatCount, null));
+    this.swapchainFormats = try this.allocator.alloc(i64, swapchainFormatCount);
+    _ = try XrResult.init(c.xrEnumerateSwapchainFormats(
+        this.session,
+        @intCast(this.swapchainFormats.len),
+        &swapchainFormatCount,
+        this.swapchainFormats.ptr,
+    ));
+
     try this.logReferenceSpaces();
 
     return this;
@@ -54,6 +65,7 @@ pub fn init(
 
 pub fn deinit(this: *@This()) void {
     std.log.info("## Session.deinit ##", .{});
+    this.allocator.free(this.swapchainFormats);
     _ = c.xrDestroySession(this.session);
 }
 
