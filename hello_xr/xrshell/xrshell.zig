@@ -1,9 +1,14 @@
 const xr_result = @import("xr_result.zig");
 pub const XrResult = xr_result.XrResult;
 pub const XrError = xr_result.XrError;
+
+pub const Options = @import("Options.zig");
+pub const ReferenceSpaceType = Options.ReferenceSpaceType;
+
 pub const Instance = @import("Instance.zig");
 pub const Session = @import("Session.zig");
 pub const Action = @import("Action.zig");
+pub const StereoView = @import("StereoView.zig");
 
 // pub fn ThrowXrResult(sourceLocation: std.builtin.SourceLocation, res: c.XrResult, originator: []const u8) void {
 //     std.log.err("XrResult failure [{s}] {s} {}", .{ to_string(res), originator, sourceLocation });
@@ -25,4 +30,3 @@ pub const Action = @import("Action.zig");
 //         ThrowXrResult(sourceLocation, res, "");
 //     }
 // }
-

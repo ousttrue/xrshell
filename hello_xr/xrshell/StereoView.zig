@@ -1,8 +1,8 @@
 const std = @import("std");
 const builtin = @import("builtin");
-const xrs = @import("xrshell/xrshell.zig");
-const XrError = xrs.XrError;
-const XrResult = xrs.XrResult;
+const xr_result = @import("xr_result.zig");
+const XrError = xr_result.XrError;
+const XrResult = xr_result.XrResult;
 const c = @import("c");
 
 const Swapchain = struct {

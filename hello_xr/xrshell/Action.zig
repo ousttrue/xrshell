@@ -4,8 +4,7 @@ const xr_result = @import("xr_result.zig");
 const XrError = xr_result.XrError;
 const XrResult = xr_result.XrResult;
 const Cube = @import("../Cube.zig");
-const geometry = @import("../geometry.zig");
-const Options = @import("../Options.zig");
+const Options = @import("Options.zig");
 
 pub const Side = struct {
     pub const LEFT = 0;

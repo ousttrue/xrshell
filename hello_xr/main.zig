@@ -4,8 +4,6 @@ const c = @import("c");
 const xrs = @import("xrshell/xrshell.zig");
 const XrError = xrs.XrError;
 const XrResult = xrs.XrResult;
-const OpenXrProgram = @import("OpenXrProgram.zig");
-const Options = @import("Options.zig");
 const QuitKeyObserver = @import("QuitKeyObserver.zig");
 const console_color_logger = @import("console_color_logger.zig");
 const gfx = if (builtin.os.tag == .windows)
@@ -31,7 +29,7 @@ pub fn main() !void {
     const allocator = gpa.allocator();
     defer std.debug.assert(gpa.deinit() == .ok);
 
-    const options: Options = try .init(std.os.argv);
+    const options: xrs.Options = try .init(std.os.argv);
 
     const gfx_extensions = [_][*:0]const u8{
         c.XR_KHR_OPENGL_ENABLE_EXTENSION_NAME,
@@ -68,7 +66,7 @@ fn run_instance(
     quit_key: *const bool,
     form_factor: c.XrFormFactor,
     view_config_type: c.XrViewConfigurationType,
-    app_space: Options.ReferenceSpaceType,
+    app_space: xrs.ReferenceSpaceType,
     gfx_extensions: []const [*:0]const u8,
     gfx_binding: *c.XrBaseInStructure,
 ) !enum {
@@ -121,7 +119,7 @@ fn run_instance(
     var action = try xrs.Action.init(allocator, instance.instance, session.session);
     defer action.deinit();
 
-    var stereo_view = try OpenXrProgram.init(
+    var stereo_view = try xrs.StereoView.init(
         allocator,
         instance.instance,
         instance.systemId,
@@ -189,13 +187,17 @@ fn run_instance(
                     // begin frame !
                     //
                     const frameState = try stereo_view.beginFrame();
-                    var layer: ?c.XrCompositionLayerProjection = null;
+                    var layer_projection: ?c.XrCompositionLayerProjection = null;
                     if (frameState.shouldRender == c.XR_TRUE) {
-                        if (try stereo_view.locate(session.space, frameState.predictedDisplayTime, view_config_type)) {
-                            //
-                            // render
-                            //
+                        if (try stereo_view.locate(
+                            session.space,
+                            frameState.predictedDisplayTime,
+                            view_config_type,
+                        )) {
+                            // scene
                             const cubes = try action.update(session.space, frameState.predictedDisplayTime);
+
+                            // render
                             try projectionLayerViews.resize(allocator, stereo_view.views.items.len);
                             for (0..stereo_view.swapchains.items.len) |i| {
                                 const acquired = try stereo_view.acquireSwapchain(i);
@@ -208,14 +210,14 @@ fn run_instance(
                                     &acquired.projection_layer_view,
                                     swapchain_image,
                                     stereo_view.colorSwapchainFormat,
-                                    Options.GetBackgroundClearColor(blend_mode),
+                                    xrs.Options.GetBackgroundClearColor(blend_mode),
                                     cubes,
                                 );
 
                                 try stereo_view.releaseSwapchain(acquired.handle);
                             }
                             // composition layer
-                            layer = .{
+                            layer_projection = .{
                                 .type = c.XR_TYPE_COMPOSITION_LAYER_PROJECTION,
                                 .space = session.space,
                                 .layerFlags = if (blend_mode == c.XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND)
@@ -229,10 +231,14 @@ fn run_instance(
                         }
                     }
                     // composition !
-                    try stereo_view.endFrame(frameState.predictedDisplayTime, blend_mode, if (layer) |*l|
-                        @ptrCast(l)
-                    else
-                        null);
+                    try stereo_view.endFrame(
+                        frameState.predictedDisplayTime,
+                        blend_mode,
+                        if (layer_projection) |*l|
+                            @ptrCast(l)
+                        else
+                            null,
+                    );
                 } else {
                     // Throttle loop since xrWaitFrame won't be called.
                     std.Thread.sleep(std.time.ns_per_ms * 250);

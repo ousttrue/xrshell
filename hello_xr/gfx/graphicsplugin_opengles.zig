@@ -3,9 +3,7 @@ const builtin = @import("builtin");
 const xr_util = @import("xr_util");
 const XrError = xr_util.XrError;
 const XrResult = xr_util.XrResult;
-const geometry = @import("../geometry.zig");
 const Cube = @import("../Cube.zig");
-const Options = @import("../Options.zig");
 const xr_linear = @import("xr_linear.zig");
 
 const gfxwrapper_opengl = if (builtin.abi.isAndroid())
@@ -27,7 +25,6 @@ var m_contextApiMajorVersion: c.GLint = 0;
 
 // Map color buffer to associated depth buffer. This map is populated on demand.
 var m_colorToDepthMap: std.AutoHashMap(u32, u32) = undefined;
-var m_clearColor: [4]f32 = undefined;
 
 pub fn GetInstanceExtensions() []const [*:0]const u8 {
     return &gfxwrapper_opengl.extensions;
@@ -64,9 +61,8 @@ const FragmentShaderGlsl: [*:0]const u8 =
     \\
 ;
 
-pub fn init(allocator: std.mem.Allocator, options: *Options) void {
+pub fn init(allocator: std.mem.Allocator) void {
     m_colorToDepthMap = .init(allocator);
-    m_clearColor = options.GetBackgroundClearColor();
 }
 
 pub fn deinit(allocator: std.mem.Allocator) void {
@@ -171,11 +167,11 @@ fn InitializeResources() void {
 
     c.glGenBuffers(1, &m_cubeVertexBuffer);
     c.glBindBuffer(c.GL_ARRAY_BUFFER, m_cubeVertexBuffer);
-    c.glBufferData(c.GL_ARRAY_BUFFER, @sizeOf(@TypeOf(geometry.c_cubeVertices)), &geometry.c_cubeVertices, c.GL_STATIC_DRAW);
+    c.glBufferData(c.GL_ARRAY_BUFFER, @sizeOf(@TypeOf(Cube.c_cubeVertices)), &Cube.c_cubeVertices, c.GL_STATIC_DRAW);
 
     c.glGenBuffers(1, &m_cubeIndexBuffer);
     c.glBindBuffer(c.GL_ELEMENT_ARRAY_BUFFER, m_cubeIndexBuffer);
-    c.glBufferData(c.GL_ELEMENT_ARRAY_BUFFER, @sizeOf(@TypeOf(geometry.c_cubeIndices)), &geometry.c_cubeIndices, c.GL_STATIC_DRAW);
+    c.glBufferData(c.GL_ELEMENT_ARRAY_BUFFER, @sizeOf(@TypeOf(Cube.c_cubeIndices)), &Cube.c_cubeIndices, c.GL_STATIC_DRAW);
 
     c.glGenVertexArrays(1, &m_vao);
     c.glBindVertexArray(m_vao);
@@ -183,8 +179,8 @@ fn InitializeResources() void {
     c.glEnableVertexAttribArray(m_vertexAttribColor);
     c.glBindBuffer(c.GL_ARRAY_BUFFER, m_cubeVertexBuffer);
     c.glBindBuffer(c.GL_ELEMENT_ARRAY_BUFFER, m_cubeIndexBuffer);
-    c.glVertexAttribPointer(m_vertexAttribCoords, 3, c.GL_FLOAT, c.GL_FALSE, @sizeOf(geometry.Vertex), null);
-    c.glVertexAttribPointer(m_vertexAttribColor, 3, c.GL_FLOAT, c.GL_FALSE, @sizeOf(geometry.Vertex), @ptrFromInt(@sizeOf(c.XrVector3f)));
+    c.glVertexAttribPointer(m_vertexAttribCoords, 3, c.GL_FLOAT, c.GL_FALSE, @sizeOf(Cube.Vertex), null);
+    c.glVertexAttribPointer(m_vertexAttribColor, 3, c.GL_FLOAT, c.GL_FALSE, @sizeOf(Cube.Vertex), @ptrFromInt(@sizeOf(c.XrVector3f)));
 }
 
 fn CheckShader(shader: c.GLuint) void {
@@ -288,6 +284,7 @@ pub fn RenderView(
     layerView: *c.XrCompositionLayerProjectionView,
     _swapchainImage: *c.XrSwapchainImageBaseHeader,
     swapchainFormat: i64,
+    clear_color: [4]f32,
     cubes: []Cube,
 ) !void {
     const swapchainImage: *c.XrSwapchainImageOpenGLESKHR = @ptrCast(_swapchainImage);
@@ -315,7 +312,7 @@ pub fn RenderView(
     c.glFramebufferTexture2D(c.GL_FRAMEBUFFER, c.GL_DEPTH_ATTACHMENT, c.GL_TEXTURE_2D, depthTexture, 0);
 
     // Clear swapchain and depth buffer.
-    c.glClearColor(m_clearColor[0], m_clearColor[1], m_clearColor[2], m_clearColor[3]);
+    c.glClearColor(clear_color[0], clear_color[1], clear_color[2], clear_color[3]);
     c.glClearDepthf(1.0);
     c.glClear(c.GL_COLOR_BUFFER_BIT | c.GL_DEPTH_BUFFER_BIT | c.GL_STENCIL_BUFFER_BIT);
 
@@ -339,7 +336,7 @@ pub fn RenderView(
         c.glUniformMatrix4fv(m_modelViewProjectionUniformLocation, 1, c.GL_FALSE, &mvp.m);
 
         // Draw the cube.
-        c.glDrawElements(c.GL_TRIANGLES, geometry.c_cubeIndices.len, c.GL_UNSIGNED_SHORT, null);
+        c.glDrawElements(c.GL_TRIANGLES, Cube.c_cubeIndices.len, c.GL_UNSIGNED_SHORT, null);
     }
 
     c.glBindVertexArray(0);

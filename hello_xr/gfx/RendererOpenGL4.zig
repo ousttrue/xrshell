@@ -1,6 +1,5 @@
 const std = @import("std");
 const c = @import("c");
-const geometry = @import("../geometry.zig");
 const Cube = @import("../Cube.zig");
 const xr_linear = @import("xr_linear.zig");
 
@@ -84,8 +83,8 @@ pub fn init(allocator: std.mem.Allocator) @This() {
     c.glBindBuffer(c.GL_ARRAY_BUFFER, this.cubeVertexBuffer);
     c.glBufferData(
         c.GL_ARRAY_BUFFER,
-        @sizeOf(@TypeOf(geometry.c_cubeVertices)),
-        &geometry.c_cubeVertices,
+        @sizeOf(@TypeOf(Cube.c_cubeVertices)),
+        &Cube.c_cubeVertices,
         c.GL_STATIC_DRAW,
     );
 
@@ -93,8 +92,8 @@ pub fn init(allocator: std.mem.Allocator) @This() {
     c.glBindBuffer(c.GL_ELEMENT_ARRAY_BUFFER, this.cubeIndexBuffer);
     c.glBufferData(
         c.GL_ELEMENT_ARRAY_BUFFER,
-        @sizeOf(@TypeOf(geometry.c_cubeIndices)),
-        &geometry.c_cubeIndices,
+        @sizeOf(@TypeOf(Cube.c_cubeIndices)),
+        &Cube.c_cubeIndices,
         c.GL_STATIC_DRAW,
     );
 
@@ -104,8 +103,8 @@ pub fn init(allocator: std.mem.Allocator) @This() {
     c.glEnableVertexAttribArray(this.vertexAttribColor);
     c.glBindBuffer(c.GL_ARRAY_BUFFER, this.cubeVertexBuffer);
     c.glBindBuffer(c.GL_ELEMENT_ARRAY_BUFFER, this.cubeIndexBuffer);
-    c.glVertexAttribPointer(this.vertexAttribCoords, 3, c.GL_FLOAT, c.GL_FALSE, @sizeOf(geometry.Vertex), null);
-    c.glVertexAttribPointer(this.vertexAttribColor, 3, c.GL_FLOAT, c.GL_FALSE, @sizeOf(geometry.Vertex), @ptrFromInt(@sizeOf(c.XrVector3f)));
+    c.glVertexAttribPointer(this.vertexAttribCoords, 3, c.GL_FLOAT, c.GL_FALSE, @sizeOf(Cube.Vertex), null);
+    c.glVertexAttribPointer(this.vertexAttribColor, 3, c.GL_FLOAT, c.GL_FALSE, @sizeOf(Cube.Vertex), @ptrFromInt(@sizeOf(c.XrVector3f)));
 
     return this;
 }
@@ -258,7 +257,7 @@ pub fn renderView(
         c.glUniformMatrix4fv(this.modelViewProjectionUniformLocation, 1, c.GL_FALSE, &mvp.m);
 
         // Draw the cube.
-        c.glDrawElements(c.GL_TRIANGLES, geometry.c_cubeIndices.len, c.GL_UNSIGNED_SHORT, null);
+        c.glDrawElements(c.GL_TRIANGLES, Cube.c_cubeIndices.len, c.GL_UNSIGNED_SHORT, null);
     }
 
     c.glBindVertexArray(0);

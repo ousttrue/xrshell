@@ -4,7 +4,7 @@ const xr_result = @import("xr_result.zig");
 const XrResult = xr_result.XrResult;
 const XrError = xr_result.XrError;
 const xr_util = @import("xr_util.zig");
-const Options = @import("../Options.zig");
+const Options = @import("Options.zig");
 
 allocator: std.mem.Allocator,
 session: c.XrSession = null,
