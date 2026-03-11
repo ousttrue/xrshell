@@ -88,6 +88,7 @@ fn run_instance(
         instance.instance,
         instance.systemId,
         gfx_binding,
+        app_space,
     );
     defer session.deinit();
 
@@ -120,7 +121,7 @@ fn run_instance(
     var action = try xrs.Action.init(allocator, instance.instance, session.session);
     defer action.deinit();
 
-    var prog = try OpenXrProgram.init(
+    var stereo_view = try OpenXrProgram.init(
         allocator,
         instance.instance,
         instance.systemId,
@@ -128,9 +129,8 @@ fn run_instance(
         view_config_type,
         colorSwapchainFormat,
         gfx.GetSupportedSwapchainSampleCount(),
-        app_space,
     );
-    defer prog.deinit();
+    defer stereo_view.deinit();
     var swapchainImageBuffers: std.ArrayList([]@TypeOf(gfx.swapchain_image)) = .{};
     var swapchainImages: std.ArrayList([]*c.XrSwapchainImageBaseHeader) = .{};
     defer {
@@ -143,7 +143,7 @@ fn run_instance(
         }
         swapchainImages.deinit(allocator);
     }
-    for (prog.swapchains.items) |swapchain| {
+    for (stereo_view.swapchains.items) |swapchain| {
         var imageCount: u32 = undefined;
         _ = try XrResult.init(c.xrEnumerateSwapchainImages(swapchain.handle, 0, &imageCount, null));
 
@@ -188,17 +188,17 @@ fn run_instance(
                     //
                     // begin frame !
                     //
-                    const frameState = try prog.beginFrame();
+                    const frameState = try stereo_view.beginFrame();
                     var layer: ?c.XrCompositionLayerProjection = null;
                     if (frameState.shouldRender == c.XR_TRUE) {
-                        if (try prog.locate(frameState.predictedDisplayTime, view_config_type)) {
+                        if (try stereo_view.locate(session.space, frameState.predictedDisplayTime, view_config_type)) {
                             //
                             // render
                             //
-                            const cubes = try action.update(prog.appSpace, frameState.predictedDisplayTime);
-                            try projectionLayerViews.resize(allocator, prog.views.items.len);
-                            for (0..prog.swapchains.items.len) |i| {
-                                const acquired = try prog.acquireSwapchain(i);
+                            const cubes = try action.update(session.space, frameState.predictedDisplayTime);
+                            try projectionLayerViews.resize(allocator, stereo_view.views.items.len);
+                            for (0..stereo_view.swapchains.items.len) |i| {
+                                const acquired = try stereo_view.acquireSwapchain(i);
                                 projectionLayerViews.items[i] = acquired.projection_layer_view;
 
                                 const entry = swapchainImages.items[i];
@@ -207,17 +207,17 @@ fn run_instance(
                                 try renderer.renderView(
                                     &acquired.projection_layer_view,
                                     swapchain_image,
-                                    prog.colorSwapchainFormat,
+                                    stereo_view.colorSwapchainFormat,
                                     Options.GetBackgroundClearColor(blend_mode),
                                     cubes,
                                 );
 
-                                try prog.releaseSwapchain(acquired.handle);
+                                try stereo_view.releaseSwapchain(acquired.handle);
                             }
                             // composition layer
                             layer = .{
                                 .type = c.XR_TYPE_COMPOSITION_LAYER_PROJECTION,
-                                .space = prog.appSpace,
+                                .space = session.space,
                                 .layerFlags = if (blend_mode == c.XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND)
                                     c.XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT |
                                         c.XR_COMPOSITION_LAYER_UNPREMULTIPLIED_ALPHA_BIT
@@ -229,7 +229,7 @@ fn run_instance(
                         }
                     }
                     // composition !
-                    try prog.endFrame(frameState.predictedDisplayTime, blend_mode, if (layer) |*l|
+                    try stereo_view.endFrame(frameState.predictedDisplayTime, blend_mode, if (layer) |*l|
                         @ptrCast(l)
                     else
                         null);

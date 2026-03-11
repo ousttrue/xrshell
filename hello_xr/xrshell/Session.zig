@@ -4,16 +4,19 @@ const xr_result = @import("xr_result.zig");
 const XrResult = xr_result.XrResult;
 const XrError = xr_result.XrError;
 const xr_util = @import("xr_util.zig");
+const Options = @import("../Options.zig");
 
 allocator: std.mem.Allocator,
 session: c.XrSession = null,
 swapchainFormats: []i64 = &.{},
+space: c.XrSpace = null,
 
 pub fn init(
     allocator: std.mem.Allocator,
     instance: c.XrInstance,
     systemId: c.XrSystemId,
     graphics_binding: *c.XrBaseInStructure,
+    app_space: Options.ReferenceSpaceType,
 ) !@This() {
     std.log.info("## Session.init ##", .{});
 
@@ -58,6 +61,9 @@ pub fn init(
         this.swapchainFormats.ptr,
     ));
 
+    const referenceSpaceCreateInfo = app_space.makeXrReferenceSpaceCreateInfo();
+    _ = try XrResult.init(c.xrCreateReferenceSpace(this.session, &referenceSpaceCreateInfo, &this.space));
+
     try this.logReferenceSpaces();
 
     return this;
@@ -65,6 +71,11 @@ pub fn init(
 
 pub fn deinit(this: *@This()) void {
     std.log.info("## Session.deinit ##", .{});
+
+    if (this.space != null) {
+        _ = c.xrDestroySpace(this.space);
+    }
+
     this.allocator.free(this.swapchainFormats);
     _ = c.xrDestroySession(this.session);
 }

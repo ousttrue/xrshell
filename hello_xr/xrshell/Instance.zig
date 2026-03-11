@@ -88,6 +88,25 @@ pub fn init(allocator: std.mem.Allocator, opts: Options) XrError!@This() {
         systemInfo.formFactor,
     });
 
+    // Read graphics properties for preferred swapchain length and logging.
+    var systemProperties: c.XrSystemProperties = .{ .type = c.XR_TYPE_SYSTEM_PROPERTIES };
+    _ = try XrResult.init(c.xrGetSystemProperties(this.instance, this.systemId, &systemProperties));
+
+    // Log system properties.
+    std.log.debug("System Properties: Name={s} VendorId={}", .{
+        systemProperties.systemName,
+        systemProperties.vendorId,
+    });
+    std.log.debug("System Graphics Properties: MaxWidth={} MaxHeight={} MaxLayers={}", .{
+        systemProperties.graphicsProperties.maxSwapchainImageWidth,
+        systemProperties.graphicsProperties.maxSwapchainImageHeight,
+        systemProperties.graphicsProperties.maxLayerCount,
+    });
+    std.log.debug("System Tracking Properties: OrientationTracking={s} PositionTracking={s}", .{
+        if (systemProperties.trackingProperties.orientationTracking == c.XR_TRUE) "True" else "False",
+        if (systemProperties.trackingProperties.positionTracking == c.XR_TRUE) "True" else "False",
+    });
+
     return this;
 }
 

@@ -4,7 +4,6 @@ const xrs = @import("xrshell/xrshell.zig");
 const XrError = xrs.XrError;
 const XrResult = xrs.XrResult;
 const c = @import("c");
-const Options = @import("Options.zig");
 
 const Swapchain = struct {
     handle: c.XrSwapchain,
@@ -16,7 +15,6 @@ allocator: std.mem.Allocator,
 instance: c.XrInstance,
 systemId: c.XrSystemId,
 session: c.XrSession,
-appSpace: c.XrSpace = null,
 
 swapchains: std.ArrayList(Swapchain) = .{},
 configViews: std.ArrayList(c.XrViewConfigurationView) = .{},
@@ -32,7 +30,6 @@ pub fn init(
     view_config_type: c.XrViewConfigurationType,
     colorSwapchainFormat: i64,
     sampleCount: u32,
-    app_space: Options.ReferenceSpaceType,
 ) !@This() {
     std.log.info("## OpenXrProgram.init ##", .{});
 
@@ -44,9 +41,6 @@ pub fn init(
         .colorSwapchainFormat = colorSwapchainFormat,
         .sampleCount = sampleCount,
     };
-
-    const referenceSpaceCreateInfo = app_space.makeXrReferenceSpaceCreateInfo();
-    _ = try XrResult.init(c.xrCreateReferenceSpace(session, &referenceSpaceCreateInfo, &this.appSpace));
 
     try this.CreateSwapchains(view_config_type);
 
@@ -64,10 +58,6 @@ pub fn deinit(this: *@This()) void {
     this.swapchains.deinit(this.allocator);
 
     this.views.deinit(this.allocator);
-
-    if (this.appSpace != null) {
-        _ = c.xrDestroySpace(this.appSpace);
-    }
 }
 
 fn makeIndent(allocator: std.mem.Allocator, indent: usize) ![]const u8 {
@@ -110,29 +100,6 @@ pub fn CreateSwapchains(
     this: *@This(),
     view_config_type: c.XrViewConfigurationType,
 ) XrError!void {
-    // Read graphics properties for preferred swapchain length and logging.
-    var systemProperties: c.XrSystemProperties = .{ .type = c.XR_TYPE_SYSTEM_PROPERTIES };
-    _ = try XrResult.init(c.xrGetSystemProperties(this.instance, this.systemId, &systemProperties));
-
-    // Log system properties.
-    std.log.debug("System Properties: Name={s} VendorId={}", .{
-        systemProperties.systemName,
-        systemProperties.vendorId,
-    });
-    std.log.debug("System Graphics Properties: MaxWidth={} MaxHeight={} MaxLayers={}", .{
-        systemProperties.graphicsProperties.maxSwapchainImageWidth,
-        systemProperties.graphicsProperties.maxSwapchainImageHeight,
-        systemProperties.graphicsProperties.maxLayerCount,
-    });
-    std.log.debug("System Tracking Properties: OrientationTracking={s} PositionTracking={s}", .{
-        if (systemProperties.trackingProperties.orientationTracking == c.XR_TRUE) "True" else "False",
-        if (systemProperties.trackingProperties.positionTracking == c.XR_TRUE) "True" else "False",
-    });
-    // Note: No other view configurations exist at the time this code was written. If this
-    // condition is not met, the project will need to be audited to see how support should be
-    // added.
-    // std.debug.assert(this.options.ViewConfigType == c.XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO); //, "Unsupported view configuration type");
-
     // Query and cache view configuration views.
     var viewCount: u32 = undefined;
     _ = try XrResult.init(c.xrEnumerateViewConfigurationViews(
@@ -269,6 +236,7 @@ pub fn beginFrame(this: @This()) !c.XrFrameState {
 
 pub fn locate(
     this: *@This(),
+    space: c.XrSpace,
     predictedDisplayTime: c.XrTime,
     view_config_type: c.XrViewConfigurationType,
 ) !bool {
@@ -279,7 +247,7 @@ pub fn locate(
         .type = c.XR_TYPE_VIEW_LOCATE_INFO,
         .viewConfigurationType = view_config_type,
         .displayTime = predictedDisplayTime,
-        .space = this.appSpace,
+        .space = space,
     };
 
     _ = try XrResult.init(c.xrLocateViews(
