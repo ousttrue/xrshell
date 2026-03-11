@@ -40,7 +40,7 @@ pub fn build(b: *std.Build) !void {
         const lib = b.addLibrary(.{
             .name = BUILD_NAME,
             .root_module = b.createModule(.{
-                .root_source_file = b.path("main_android.zig"),
+                .root_source_file = b.path("android_main.zig"),
                 .target = target,
                 .optimize = optimize,
                 .link_libcpp = true,
