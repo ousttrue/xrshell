@@ -24,15 +24,12 @@ instance: c.XrInstance,
 systemId: c.XrSystemId,
 session: c.XrSession,
 appSpace: c.XrSpace = null,
-layer: c.XrCompositionLayerProjection = .{ .type = c.XR_TYPE_COMPOSITION_LAYER_PROJECTION },
 
 swapchains: std.ArrayList(Swapchain) = .{},
 configViews: std.ArrayList(c.XrViewConfigurationView) = .{},
 swapchainImages: std.AutoHashMap(c.XrSwapchain, []*c.XrSwapchainImageBaseHeader),
 views: std.ArrayList(c.XrView) = .{},
 colorSwapchainFormat: i64 = -1,
-
-projectionLayerViews: std.ArrayList(c.XrCompositionLayerProjectionView) = .{},
 
 swapchainImageBuffers: std.ArrayList([]@TypeOf(gfx.swapchain_image)) = .{},
 fn allocateSwapchainImageStructs(
@@ -96,7 +93,6 @@ pub fn deinit(this: *@This()) void {
         this.swapchainImages.deinit();
     }
 
-    this.projectionLayerViews.deinit(this.allocator);
     this.configViews.deinit(this.allocator);
 
     for (this.swapchains.items) |swapchain| {
@@ -283,69 +279,57 @@ pub fn CreateSwapchains(this: *@This(), view_config_type: c.XrViewConfigurationT
     }
 }
 
-pub fn renderLayer(
+pub fn renderView(
     this: *@This(),
+    i: usize,
     blend_mode: c.XrEnvironmentBlendMode,
     cubes: []const Cube,
     renderer: *Renderer,
-) !*c.XrCompositionLayerBaseHeader {
+) !c.XrCompositionLayerProjectionView {
+    const viewSwapchain = this.swapchains.items[i];
     // std.debug.assert(viewCountOutput == viewCapacityInput);
     // std.debug.assert(viewCountOutput == m_configViews.items.len);
     // std.debug.assert(viewCountOutput == m_swapchains.items.len);
 
-    try this.projectionLayerViews.resize(this.allocator, this.views.items.len);
-
     // Render view to the appropriate part of the swapchain image.
-    for (this.swapchains.items, 0..) |viewSwapchain, i| {
-        // Each view has a separate swapchain which is acquired, rendered to, and released.
-        var acquireInfo: c.XrSwapchainImageAcquireInfo = .{ .type = c.XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO };
-        var swapchainImageIndex: u32 = undefined;
-        _ = try XrResult.init(c.xrAcquireSwapchainImage(viewSwapchain.handle, &acquireInfo, &swapchainImageIndex));
+    // Each view has a separate swapchain which is acquired, rendered to, and released.
+    var acquireInfo: c.XrSwapchainImageAcquireInfo = .{ .type = c.XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO };
+    var swapchainImageIndex: u32 = undefined;
+    _ = try XrResult.init(c.xrAcquireSwapchainImage(viewSwapchain.handle, &acquireInfo, &swapchainImageIndex));
 
-        var waitInfo: c.XrSwapchainImageWaitInfo = .{
-            .type = c.XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO,
-            .timeout = c.XR_INFINITE_DURATION,
-        };
-        _ = try XrResult.init(c.xrWaitSwapchainImage(viewSwapchain.handle, &waitInfo));
-
-        this.projectionLayerViews.items[i] = .{
-            .type = c.XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW,
-            .pose = this.views.items[i].pose,
-            .fov = this.views.items[i].fov,
-            .subImage = .{
-                .swapchain = viewSwapchain.handle,
-                .imageRect = .{
-                    .offset = .{ .x = 0, .y = 0 },
-                    .extent = .{ .width = @intCast(viewSwapchain.width), .height = @intCast(viewSwapchain.height) },
-                },
-            },
-        };
-
-        const entry = this.swapchainImages.get(viewSwapchain.handle).?;
-        const swapchainImage: *c.XrSwapchainImageBaseHeader = entry[swapchainImageIndex];
-        try renderer.renderView(
-            &this.projectionLayerViews.items[i],
-            swapchainImage,
-            this.colorSwapchainFormat,
-            Options.GetBackgroundClearColor(blend_mode),
-            cubes,
-        );
-
-        var releaseInfo: c.XrSwapchainImageReleaseInfo = .{ .type = c.XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO };
-        _ = try XrResult.init(c.xrReleaseSwapchainImage(viewSwapchain.handle, &releaseInfo));
-    }
-
-    this.layer = .{
-        .type = c.XR_TYPE_COMPOSITION_LAYER_PROJECTION,
-        .space = this.appSpace,
-        .layerFlags = if (blend_mode == c.XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND)
-            c.XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT | c.XR_COMPOSITION_LAYER_UNPREMULTIPLIED_ALPHA_BIT
-        else
-            0,
-        .viewCount = @intCast(this.projectionLayerViews.items.len),
-        .views = this.projectionLayerViews.items.ptr,
+    var waitInfo: c.XrSwapchainImageWaitInfo = .{
+        .type = c.XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO,
+        .timeout = c.XR_INFINITE_DURATION,
     };
-    return @ptrCast(&this.layer);
+    _ = try XrResult.init(c.xrWaitSwapchainImage(viewSwapchain.handle, &waitInfo));
+
+    const projectionLayerView: c.XrCompositionLayerProjectionView = .{
+        .type = c.XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW,
+        .pose = this.views.items[i].pose,
+        .fov = this.views.items[i].fov,
+        .subImage = .{
+            .swapchain = viewSwapchain.handle,
+            .imageRect = .{
+                .offset = .{ .x = 0, .y = 0 },
+                .extent = .{ .width = @intCast(viewSwapchain.width), .height = @intCast(viewSwapchain.height) },
+            },
+        },
+    };
+
+    const entry = this.swapchainImages.get(viewSwapchain.handle).?;
+    const swapchainImage: *c.XrSwapchainImageBaseHeader = entry[swapchainImageIndex];
+    try renderer.renderView(
+        &projectionLayerView,
+        swapchainImage,
+        this.colorSwapchainFormat,
+        Options.GetBackgroundClearColor(blend_mode),
+        cubes,
+    );
+
+    var releaseInfo: c.XrSwapchainImageReleaseInfo = .{ .type = c.XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO };
+    _ = try XrResult.init(c.xrReleaseSwapchainImage(viewSwapchain.handle, &releaseInfo));
+
+    return projectionLayerView;
 }
 
 pub fn endFrame(

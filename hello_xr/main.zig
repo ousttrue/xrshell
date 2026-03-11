@@ -105,6 +105,9 @@ fn run_instance(
     );
     defer prog.deinit();
 
+    var projectionLayerViews: std.ArrayList(c.XrCompositionLayerProjectionView) = .{};
+    defer projectionLayerViews.deinit(allocator);
+
     // renderer
     var renderer: Renderer = .init(allocator);
     defer renderer.deinit();
@@ -124,18 +127,36 @@ fn run_instance(
                     try action.pollActions();
 
                     const frameState = try prog.beginFrame();
-                    var layer: ?*c.XrCompositionLayerBaseHeader = null;
+
+                    var layer: ?c.XrCompositionLayerProjection = null;
                     if (frameState.shouldRender == c.XR_TRUE) {
                         if (try prog.locate(frameState.predictedDisplayTime, view_config_type)) {
                             const cubes = try action.update(prog.appSpace, frameState.predictedDisplayTime);
-                            layer = try prog.renderLayer(
-                                blend_mode,
-                                cubes,
-                                &renderer,
-                            );
+                            try projectionLayerViews.resize(allocator, prog.views.items.len);
+                            for (0..prog.swapchains.items.len) |i| {
+                                projectionLayerViews.items[i] = try prog.renderView(
+                                    i,
+                                    blend_mode,
+                                    cubes,
+                                    &renderer,
+                                );
+                            }
+                            layer = .{
+                                .type = c.XR_TYPE_COMPOSITION_LAYER_PROJECTION,
+                                .space = prog.appSpace,
+                                .layerFlags = if (blend_mode == c.XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND)
+                                    c.XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT | c.XR_COMPOSITION_LAYER_UNPREMULTIPLIED_ALPHA_BIT
+                                else
+                                    0,
+                                .viewCount = @intCast(projectionLayerViews.items.len),
+                                .views = projectionLayerViews.items.ptr,
+                            };
                         }
                     }
-                    try prog.endFrame(frameState.predictedDisplayTime, blend_mode, layer);
+                    try prog.endFrame(frameState.predictedDisplayTime, blend_mode, if (layer) |*l|
+                        @ptrCast(l)
+                    else
+                        null);
                 } else {
                     // Throttle loop since xrWaitFrame won't be called.
                     std.Thread.sleep(std.time.ns_per_ms * 250);
