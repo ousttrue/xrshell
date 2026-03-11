@@ -31,16 +31,8 @@ pub fn main() !void {
 
     const options: xrs.Options = try .init(std.os.argv);
 
-    const gfx_extensions = [_][*:0]const u8{
-        c.XR_KHR_OPENGL_ENABLE_EXTENSION_NAME,
-    };
     const window = Window.create(allocator);
     defer window.destroy();
-    var gfx_binding: c.XrGraphicsBindingOpenGLWin32KHR = .{
-        .type = c.XR_TYPE_GRAPHICS_BINDING_OPENGL_WIN32_KHR,
-        .hDC = window.context.hDC,
-        .hGLRC = window.context.hGLRC,
-    };
 
     while (!quit_key.quitKeyPressed) {
         std.log.warn("New instance", .{});
@@ -51,8 +43,8 @@ pub fn main() !void {
             options.FormFactor,
             options.ViewConfigType,
             options.AppSpace,
-            &gfx_extensions,
-            @ptrCast(&gfx_binding),
+            &gfx.extensions,
+            gfx.makeBinding(window.context.hDC, window.context.hGLRC),
         );
         switch (next) {
             .quit => break,
@@ -68,7 +60,7 @@ fn run_instance(
     view_config_type: c.XrViewConfigurationType,
     app_space: xrs.ReferenceSpaceType,
     gfx_extensions: []const [*:0]const u8,
-    gfx_binding: *c.XrBaseInStructure,
+    gfx_binding: gfx.Binding,
 ) !enum {
     quit,
     restart,
@@ -81,17 +73,19 @@ fn run_instance(
     const blend_mode = try instance.getPreferredBlendMode(view_config_type);
     try instance.logViewConfigurations(view_config_type, blend_mode);
 
+    try gfx.requirements(instance.instance, instance.systemId);
+
     var session = try xrs.Session.init(
         allocator,
         instance.instance,
         instance.systemId,
-        gfx_binding,
+        @ptrCast(&gfx_binding),
         app_space,
     );
     defer session.deinit();
 
     // Select a swapchain format.
-    const colorSwapchainFormat = try gfx.SelectColorSwapchainFormat(allocator, session.swapchainFormats);
+    const colorSwapchainFormat = try gfx.selectColorSwapchainFormat(allocator, session.swapchainFormats);
     // Print swapchain formats and the selected one.
     {
         // const swapchainFormatsString: []const u8 = "";
@@ -126,7 +120,7 @@ fn run_instance(
         session.session,
         view_config_type,
         colorSwapchainFormat,
-        gfx.GetSupportedSwapchainSampleCount(),
+        gfx.getSupportedSwapchainSampleCount(),
     );
     defer stereo_view.deinit();
     var swapchainImageBuffers: std.ArrayList([]@TypeOf(gfx.swapchain_image)) = .{};

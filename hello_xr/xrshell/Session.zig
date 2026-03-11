@@ -15,30 +15,10 @@ pub fn init(
     allocator: std.mem.Allocator,
     instance: c.XrInstance,
     systemId: c.XrSystemId,
-    graphics_binding: *c.XrBaseInStructure,
+    graphics_binding: *const c.XrBaseInStructure,
     app_space: Options.ReferenceSpaceType,
 ) !@This() {
     std.log.info("## Session.init ##", .{});
-
-    // pub fn InitializeDevice(instance: c.XrInstance, systemId: c.XrSystemId) XrError!void {
-    // Extension function must be loaded by name
-    var pfnGetOpenGLGraphicsRequirementsKHR: c.PFN_xrGetOpenGLGraphicsRequirementsKHR = undefined;
-    _ = try XrResult.init(c.xrGetInstanceProcAddr(instance, "xrGetOpenGLGraphicsRequirementsKHR", &pfnGetOpenGLGraphicsRequirementsKHR));
-
-    var graphicsRequirements: c.XrGraphicsRequirementsOpenGLKHR = .{ .type = c.XR_TYPE_GRAPHICS_REQUIREMENTS_OPENGL_KHR };
-    _ = try XrResult.init((pfnGetOpenGLGraphicsRequirementsKHR.?)(instance, systemId, &graphicsRequirements));
-
-    var major: c.GLint = 0;
-    c.glGetIntegerv(c.GL_MAJOR_VERSION, &major);
-    var minor: c.GLint = 0;
-    c.glGetIntegerv(c.GL_MINOR_VERSION, &minor);
-
-    const desiredApiVersion = c.XR_MAKE_VERSION(@as(i64, @intCast(major)), @as(i64, @intCast(minor)), 0);
-    if (graphicsRequirements.minApiVersionSupported > desiredApiVersion) {
-        @panic("Runtime does not support desired Graphics API and/or version");
-    }
-
-    // initializeResources();
 
     var this = @This(){
         .allocator = allocator,
