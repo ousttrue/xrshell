@@ -34,6 +34,26 @@ colorSwapchainFormat: i64 = -1,
 
 projectionLayerViews: std.ArrayList(c.XrCompositionLayerProjectionView) = .{},
 
+swapchainImageBuffers: std.ArrayList([]@TypeOf(gfx.swapchain_image)) = .{},
+fn allocateSwapchainImageStructs(
+    this: *@This(),
+    swapchainImageBase: []*c.XrSwapchainImageBaseHeader,
+) !void {
+    // Allocate and initialize the buffer of image structs
+    // (must be sequential in memory for xrEnumerateSwapchainImages).
+    // Return back an array of pointers to each swapchain image struct
+    // so the consumer doesn't need to know the type/size.
+    const swapchainImageBuffer = try this.allocator.alloc(@TypeOf(gfx.swapchain_image), swapchainImageBase.len);
+    for (swapchainImageBuffer) |*buf| {
+        buf.* = gfx.swapchain_image;
+    }
+    for (swapchainImageBuffer, 0..) |*buf, i| {
+        swapchainImageBase[i] = @ptrCast(buf);
+    }
+    // Keep the buffer alive by moving it into the list of buffers.
+    try this.swapchainImageBuffers.append(this.allocator, swapchainImageBuffer);
+}
+
 pub fn init(
     allocator: std.mem.Allocator,
     instance: c.XrInstance,
@@ -62,6 +82,12 @@ pub fn init(
 
 pub fn deinit(this: *@This()) void {
     std.log.info("## OpenXrProgram.deinit ##", .{});
+
+    for (this.swapchainImageBuffers.items) |image| {
+        this.allocator.free(image);
+    }
+    this.swapchainImageBuffers.deinit(this.allocator);
+
     {
         var it = this.swapchainImages.iterator();
         while (it.next()) |item| {
@@ -249,7 +275,7 @@ pub fn CreateSwapchains(this: *@This(), view_config_type: c.XrViewConfigurationT
             _ = try XrResult.init(c.xrEnumerateSwapchainImages(swapchain.handle, 0, &imageCount, null));
             // XXX This should really just return XrSwapchainImageBaseHeader*
             const swapchainImages = try this.allocator.alloc(*c.XrSwapchainImageBaseHeader, imageCount);
-            try gfx.AllocateSwapchainImageStructs(this.allocator, swapchainImages);
+            try this.allocateSwapchainImageStructs(swapchainImages);
             _ = try XrResult.init(c.xrEnumerateSwapchainImages(swapchain.handle, imageCount, &imageCount, swapchainImages[0]));
 
             try this.swapchainImages.put(swapchain.handle, swapchainImages);
