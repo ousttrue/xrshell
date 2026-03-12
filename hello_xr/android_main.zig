@@ -5,7 +5,7 @@ const XrError = xrs.XrError;
 const XrResult = xrs.XrResult;
 const Window = @import("window/WindowAndroidOpenGLES.zig");
 const binding = @import("gfx/graphicsplugin_opengles.zig").binding;
-const Renderer = @import("gfx/RendererOpenGL4.zig");
+const Renderer = @import("gfx/RendererOpenGLES.zig");
 
 pub const std_options: std.Options = .{
     .logFn = logFn,
@@ -155,20 +155,20 @@ export fn android_main(app: *c.android_app) void {
         .applicationActivity = app.activity,
     };
 
+    std.log.warn("New instance", .{});
+
+    var xr_app = App.init(
+        allocator,
+        &binding.extensions,
+        &instanceCreateInfoAndroid,
+        options.FormFactor,
+        options.ViewConfigType,
+        binding.makeBinding(window.context),
+        options.AppSpace,
+    ) catch @panic("App.init");
+    defer xr_app.deinit();
+
     while (app.destroyRequested == 0) {
-        std.log.warn("New instance", .{});
-
-        var xr_app = App.init(
-            allocator,
-            &binding.extensions,
-            &instanceCreateInfoAndroid,
-            options.FormFactor,
-            options.ViewConfigType,
-            binding.makeBinding(window.context),
-            options.AppSpace,
-        ) catch @panic("App.init");
-        defer xr_app.deinit();
-
         // Read all pending events.
         while (true) {
             var events: c_int = undefined;
@@ -186,25 +186,14 @@ export fn android_main(app: *c.android_app) void {
             }
         }
 
-        //     OpenXrProgram.PollEvents(allocator, &exitRenderLoop, &requestRestart) catch @panic("OpenXrProgram.PollEvents");
-        //     if (exitRenderLoop) {
-        //         c.ANativeActivity_finish(app.activity);
-        //         continue;
-        //     }
-        //
-        //     if (!OpenXrProgram.IsSessionRunning()) {
-        //         // Throttle loop since xrWaitFrame won't be called.
-        //         std.Thread.sleep(std.time.ns_per_ms * 250);
-        //         continue;
-        //     }
-        //
-        //     action.PollActions(session) catch |e| {
-        //         std.log.err("PollActions => {s}", .{@errorName(e)});
-        //     };
-        //     OpenXrProgram.RenderFrame(allocator) catch @panic("OpenXrProgram.RenderFrame");
+        const next = xr_app.run_frame() catch @panic("run_frame");
+        switch (next) {
+            .next => continue,
+            .quit => break,
+        }
     }
 
-    // // app.activity.vm.DetachCurrentThread();
+    // app.activity.vm.DetachCurrentThread();
 }
 
 const App = struct {
@@ -349,99 +338,92 @@ const App = struct {
         std.log.debug("Swapchain Formats: {s}", .{str});
     }
 
-    fn run(
-        this: *@This(),
-        quit_key: *const bool,
-    ) !enum {
+    fn run_frame(this: *@This()) !enum {
+        next,
         quit,
-        restart,
     } {
-        this.isSessionRunning = false;
-        std.log.warn("Loop start", .{});
-        while (!quit_key.*) {
-            switch (try this.instance.pollEvents()) {
-                .quit => {
-                    break;
-                },
-                .restart => {
-                    return .restart;
-                },
-                .next => {
-                    if (this.isSessionRunning) {
-                        try this.action.pollActions();
-                        //
-                        // begin frame !
-                        //
-                        const frameState = try this.stereo_view.beginFrame();
-                        var layer_projection: ?c.XrCompositionLayerProjection = null;
-                        if (frameState.shouldRender == c.XR_TRUE) {
-                            if (try this.stereo_view.locate(
-                                this.session.space,
-                                frameState.predictedDisplayTime,
-                                this.view_config_type,
-                            )) {
-                                // scene
-                                const cubes = try this.action.update(this.session.space, frameState.predictedDisplayTime);
-
-                                // render
-                                try this.projectionLayerViews.resize(this.allocator, this.stereo_view.views.items.len);
-                                for (0..this.stereo_view.swapchains.items.len) |i| {
-                                    const acquired = try this.stereo_view.acquireSwapchain(i);
-                                    this.projectionLayerViews.items[i] = acquired.projection_layer_view;
-
-                                    const entry = this.swapchainImages.items[i];
-                                    const swapchain_image = entry[acquired.swapchainImageIndex];
-                                    const color_texture = @as(*const @TypeOf(binding.swapchain_image), @ptrCast(swapchain_image)).image;
-
-                                    try this.renderer.renderView(
-                                        &acquired.projection_layer_view,
-                                        color_texture,
-                                        this.stereo_view.colorSwapchainFormat,
-                                        xrs.Options.GetBackgroundClearColor(this.blend_mode),
-                                        cubes,
-                                    );
-
-                                    try this.stereo_view.releaseSwapchain(acquired.handle);
-                                }
-                                // composition layer
-                                layer_projection = .{
-                                    .type = c.XR_TYPE_COMPOSITION_LAYER_PROJECTION,
-                                    .space = this.session.space,
-                                    .layerFlags = if (this.blend_mode == c.XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND)
-                                        c.XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT |
-                                            c.XR_COMPOSITION_LAYER_UNPREMULTIPLIED_ALPHA_BIT
-                                    else
-                                        0,
-                                    .viewCount = @intCast(this.projectionLayerViews.items.len),
-                                    .views = this.projectionLayerViews.items.ptr,
-                                };
-                            }
-                        }
-                        // composition !
-                        try this.stereo_view.endFrame(
+        switch (try this.instance.pollEvents()) {
+            .quit => {
+                return .quit;
+            },
+            .restart => {
+                return .quit;
+            },
+            .next => {
+                if (this.isSessionRunning) {
+                    try this.action.pollActions();
+                    //
+                    // begin frame !
+                    //
+                    const frameState = try this.stereo_view.beginFrame();
+                    var layer_projection: ?c.XrCompositionLayerProjection = null;
+                    if (frameState.shouldRender == c.XR_TRUE) {
+                        if (try this.stereo_view.locate(
+                            this.session.space,
                             frameState.predictedDisplayTime,
-                            this.blend_mode,
-                            if (layer_projection) |*l|
-                                @ptrCast(l)
-                            else
-                                null,
-                        );
-                    } else {
-                        // Throttle loop since xrWaitFrame won't be called.
-                        std.Thread.sleep(std.time.ns_per_ms * 250);
+                            this.view_config_type,
+                        )) {
+                            // scene
+                            const cubes = try this.action.update(this.session.space, frameState.predictedDisplayTime);
+
+                            // render
+                            try this.projectionLayerViews.resize(this.allocator, this.stereo_view.views.items.len);
+                            for (0..this.stereo_view.swapchains.items.len) |i| {
+                                const acquired = try this.stereo_view.acquireSwapchain(i);
+                                this.projectionLayerViews.items[i] = acquired.projection_layer_view;
+
+                                const entry = this.swapchainImages.items[i];
+                                const swapchain_image = entry[acquired.swapchainImageIndex];
+                                const color_texture = @as(*const @TypeOf(binding.swapchain_image), @ptrCast(swapchain_image)).image;
+
+                                try this.renderer.renderView(
+                                    &acquired.projection_layer_view,
+                                    color_texture,
+                                    this.stereo_view.colorSwapchainFormat,
+                                    xrs.Options.GetBackgroundClearColor(this.blend_mode),
+                                    cubes,
+                                );
+
+                                try this.stereo_view.releaseSwapchain(acquired.handle);
+                            }
+                            // composition layer
+                            layer_projection = .{
+                                .type = c.XR_TYPE_COMPOSITION_LAYER_PROJECTION,
+                                .space = this.session.space,
+                                .layerFlags = if (this.blend_mode == c.XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND)
+                                    c.XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT |
+                                        c.XR_COMPOSITION_LAYER_UNPREMULTIPLIED_ALPHA_BIT
+                                else
+                                    0,
+                                .viewCount = @intCast(this.projectionLayerViews.items.len),
+                                .views = this.projectionLayerViews.items.ptr,
+                            };
+                        }
                     }
-                },
-                .session_begin => {
-                    try this.session.begin(this.view_config_type);
-                    this.isSessionRunning = true;
-                },
-                .session_end => {
-                    try this.session.end();
-                    this.isSessionRunning = false;
-                },
-            }
+                    // composition !
+                    try this.stereo_view.endFrame(
+                        frameState.predictedDisplayTime,
+                        this.blend_mode,
+                        if (layer_projection) |*l|
+                            @ptrCast(l)
+                        else
+                            null,
+                    );
+                } else {
+                    // Throttle loop since xrWaitFrame won't be called.
+                    std.Thread.sleep(std.time.ns_per_ms * 250);
+                }
+            },
+            .session_begin => {
+                try this.session.begin(this.view_config_type);
+                this.isSessionRunning = true;
+            },
+            .session_end => {
+                try this.session.end();
+                this.isSessionRunning = false;
+            },
         }
 
-        return .quit;
+        return .next;
     }
 };

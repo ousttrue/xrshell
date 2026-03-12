@@ -64,8 +64,8 @@ const private = struct {
 
 pub const binding = if (builtin.abi.isAndroid())
     struct {
-        pub const GraphicsBinding = c.XrGraphicsBindingOpenGLESAndroidKHR;
         pub const extensions = [_][*:0]const u8{c.XR_KHR_OPENGL_ES_ENABLE_EXTENSION_NAME};
+        pub const GraphicsBinding = c.XrGraphicsBindingOpenGLESAndroidKHR;
         pub fn makeBinding(window: anytype) GraphicsBinding {
             return .{
                 .type = c.XR_TYPE_GRAPHICS_BINDING_OPENGL_ES_ANDROID_KHR,
