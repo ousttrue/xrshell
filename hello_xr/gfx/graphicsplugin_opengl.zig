@@ -4,7 +4,7 @@ const xrs = @import("../xrshell/xrshell.zig");
 const XrError = xrs.XrError;
 const XrResult = xrs.XrResult;
 
-pub const Binding = c.XrGraphicsBindingOpenGLWin32KHR;
+pub const GraphicsBinding = c.XrGraphicsBindingOpenGLWin32KHR;
 
 pub const extensions = [_][*:0]const u8{
     c.XR_KHR_OPENGL_ENABLE_EXTENSION_NAME,
@@ -14,7 +14,7 @@ pub const swapchain_image: c.XrSwapchainImageOpenGLKHR = .{
     .type = c.XR_TYPE_SWAPCHAIN_IMAGE_OPENGL_KHR,
 };
 
-pub fn makeBinding(window: anytype) Binding {
+pub fn makeBinding(window: anytype) GraphicsBinding {
     return .{
         .type = c.XR_TYPE_GRAPHICS_BINDING_OPENGL_WIN32_KHR,
         .next = null,

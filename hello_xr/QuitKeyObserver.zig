@@ -9,6 +9,7 @@ pub fn deinit(this: *@This()) void {
     }
 }
 
+/// Spawn a thread to wait for a keypress
 pub fn spawn(this: *@This()) !void {
     std.log.info("[QuitKeyObserver] Press [enter] to shutdown...", .{});
     std.debug.assert(this.thread == null);
