@@ -8,6 +8,7 @@ const binding = if (builtin.os.tag == .windows)
     @import("../gfx/graphicsplugin_opengl.zig")
 else
     @import("../gfx/graphicsplugin_opengles.zig").binding;
+const Cube = @import("../Cube.zig");
 
 const Swapchain = struct {
     handle: c.XrSwapchain,
@@ -19,6 +20,8 @@ allocator: std.mem.Allocator,
 instance: c.XrInstance,
 systemId: c.XrSystemId,
 session: c.XrSession,
+view_config_type: c.XrViewConfigurationType,
+blend_mode: c.XrEnvironmentBlendMode,
 
 swapchains: std.ArrayList(Swapchain) = .{},
 configViews: std.ArrayList(c.XrViewConfigurationView) = .{},
@@ -27,6 +30,7 @@ colorSwapchainFormat: i64,
 sampleCount: u32,
 swapchainImages: std.ArrayList([]*c.XrSwapchainImageBaseHeader) = .{},
 swapchainImageBuffers: std.ArrayList([]@TypeOf(binding.swapchain_image)) = .{},
+projectionLayerViews: std.ArrayList(c.XrCompositionLayerProjectionView) = .{},
 
 pub fn init(
     allocator: std.mem.Allocator,
@@ -34,6 +38,7 @@ pub fn init(
     systemId: c.XrSystemId,
     session: c.XrSession,
     view_config_type: c.XrViewConfigurationType,
+    blend_mode: c.XrEnvironmentBlendMode,
     swapchainFormats: []i64,
     sampleCount: u32,
 ) !@This() {
@@ -49,6 +54,8 @@ pub fn init(
         .session = session,
         .colorSwapchainFormat = colorSwapchainFormat,
         .sampleCount = sampleCount,
+        .view_config_type = view_config_type,
+        .blend_mode = blend_mode,
     };
 
     this.logFormats(swapchainFormats, colorSwapchainFormat);
@@ -60,6 +67,8 @@ pub fn init(
 
 pub fn deinit(this: *@This()) void {
     std.log.info("## OpenXrProgram.deinit ##", .{});
+
+    this.projectionLayerViews.deinit(this.allocator);
 
     for (this.swapchainImageBuffers.items) |image| {
         this.allocator.free(image);
@@ -348,3 +357,71 @@ const NextFrame = enum {
     quit,
     restart,
 };
+
+pub fn composite(
+    this: *@This(),
+    frameState: c.XrFrameState,
+    space: c.XrSpace,
+    renderer: anytype,
+    cubes: []const Cube,
+) !void {
+    var layer_projection: ?c.XrCompositionLayerProjection = null;
+    if (frameState.shouldRender == c.XR_TRUE) {
+        if (try this.locate(
+            space,
+            frameState.predictedDisplayTime,
+            this.view_config_type,
+        )) {
+
+            // render
+            try this.projectionLayerViews.resize(this.allocator, this.views.items.len);
+            for (0..this.swapchains.items.len) |i| {
+                const acquired = try this.acquireSwapchain(i);
+                this.projectionLayerViews.items[i] = acquired.projection_layer_view;
+                const color_texture = this.getTexture(i, acquired.swapchainImageIndex);
+                try renderer.renderView(
+                    &acquired.projection_layer_view,
+                    color_texture,
+                    this.colorSwapchainFormat,
+                    getBackgroundClearColor(this.blend_mode),
+                    cubes,
+                );
+
+                try this.releaseSwapchain(acquired.handle);
+            }
+            // composition layer
+            layer_projection = .{
+                .type = c.XR_TYPE_COMPOSITION_LAYER_PROJECTION,
+                .space = space,
+                .layerFlags = if (this.blend_mode == c.XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND)
+                    c.XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT |
+                        c.XR_COMPOSITION_LAYER_UNPREMULTIPLIED_ALPHA_BIT
+                else
+                    0,
+                .viewCount = @intCast(this.projectionLayerViews.items.len),
+                .views = this.projectionLayerViews.items.ptr,
+            };
+        }
+    }
+    // composition !
+    try this.endFrame(
+        frameState.predictedDisplayTime,
+        this.blend_mode,
+        if (layer_projection) |*l|
+            @ptrCast(l)
+        else
+            null,
+    );
+}
+
+pub fn getBackgroundClearColor(environmentBlendMode: c.XrEnvironmentBlendMode) [4]f32 {
+    const SlateGrey = [4]f32{ 0.184313729, 0.309803933, 0.309803933, 1.0 };
+    const TransparentBlack = [4]f32{ 0.0, 0.0, 0.0, 0.0 };
+    const Black = [4]f32{ 0.0, 0.0, 0.0, 1.0 };
+    return switch (environmentBlendMode) {
+        c.XR_ENVIRONMENT_BLEND_MODE_OPAQUE => SlateGrey,
+        c.XR_ENVIRONMENT_BLEND_MODE_ADDITIVE => Black,
+        c.XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND => TransparentBlack,
+        else => SlateGrey,
+    };
+}

@@ -118,18 +118,6 @@ fn getNextArg(argv: [][*:0]u8, i: *usize) []const u8 {
     return std.mem.span(argv[i.*]);
 }
 
-pub fn GetBackgroundClearColor(environmentBlendMode: c.XrEnvironmentBlendMode) [4]f32 {
-    const SlateGrey = [4]f32{ 0.184313729, 0.309803933, 0.309803933, 1.0 };
-    const TransparentBlack = [4]f32{ 0.0, 0.0, 0.0, 0.0 };
-    const Black = [4]f32{ 0.0, 0.0, 0.0, 1.0 };
-    return switch (environmentBlendMode) {
-        c.XR_ENVIRONMENT_BLEND_MODE_OPAQUE => SlateGrey,
-        c.XR_ENVIRONMENT_BLEND_MODE_ADDITIVE => Black,
-        c.XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND => TransparentBlack,
-        else => SlateGrey,
-    };
-}
-
 pub fn GetXrFormFactor(formFactorStr: []const u8) !c.XrFormFactor {
     if (std.ascii.eqlIgnoreCase(formFactorStr, "Hmd")) {
         return c.XR_FORM_FACTOR_HEAD_MOUNTED_DISPLAY;

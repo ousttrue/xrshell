@@ -10,9 +10,7 @@ instance: xrs.Instance,
 session: xrs.Session,
 action: xrs.Action,
 stereo_view: xrs.StereoView,
-projectionLayerViews: std.ArrayList(c.XrCompositionLayerProjectionView) = .{},
 view_config_type: c.XrViewConfigurationType,
-blend_mode: c.XrEnvironmentBlendMode,
 isSessionRunning: bool = false,
 
 pub fn init(
@@ -53,6 +51,7 @@ pub fn init(
         instance.systemId,
         session.session,
         view_config_type,
+        blend_mode,
         session.swapchainFormats,
         sample_count,
     );
@@ -64,13 +63,10 @@ pub fn init(
         .action = action,
         .stereo_view = stereo_view,
         .view_config_type = view_config_type,
-        .blend_mode = blend_mode,
     };
 }
 
 pub fn deinit(this: *@This()) void {
-    this.projectionLayerViews.deinit(this.allocator);
-
     this.stereo_view.deinit();
     this.action.deinit();
     this.session.deinit();
@@ -90,60 +86,14 @@ pub fn run_frame(this: *@This(), renderer: anytype) !enum {
         },
         .next => {
             if (this.isSessionRunning) {
-                try this.action.pollActions();
-                //
-                // begin frame !
-                //
+                // begin frame
                 const frameState = try this.stereo_view.beginFrame();
-                var layer_projection: ?c.XrCompositionLayerProjection = null;
-                if (frameState.shouldRender == c.XR_TRUE) {
-                    if (try this.stereo_view.locate(
-                        this.session.space,
-                        frameState.predictedDisplayTime,
-                        this.view_config_type,
-                    )) {
-                        // scene
-                        const cubes = try this.action.update(this.session.space, frameState.predictedDisplayTime);
 
-                        // render
-                        try this.projectionLayerViews.resize(this.allocator, this.stereo_view.views.items.len);
-                        for (0..this.stereo_view.swapchains.items.len) |i| {
-                            const acquired = try this.stereo_view.acquireSwapchain(i);
-                            this.projectionLayerViews.items[i] = acquired.projection_layer_view;
-                            const color_texture = this.stereo_view.getTexture(i, acquired.swapchainImageIndex);
-                            try renderer.renderView(
-                                &acquired.projection_layer_view,
-                                color_texture,
-                                this.stereo_view.colorSwapchainFormat,
-                                xrs.Options.GetBackgroundClearColor(this.blend_mode),
-                                cubes,
-                            );
+                // scene
+                try this.action.pollActions();
+                const cubes = try this.action.update(this.session.space, frameState.predictedDisplayTime);
 
-                            try this.stereo_view.releaseSwapchain(acquired.handle);
-                        }
-                        // composition layer
-                        layer_projection = .{
-                            .type = c.XR_TYPE_COMPOSITION_LAYER_PROJECTION,
-                            .space = this.session.space,
-                            .layerFlags = if (this.blend_mode == c.XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND)
-                                c.XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT |
-                                    c.XR_COMPOSITION_LAYER_UNPREMULTIPLIED_ALPHA_BIT
-                            else
-                                0,
-                            .viewCount = @intCast(this.projectionLayerViews.items.len),
-                            .views = this.projectionLayerViews.items.ptr,
-                        };
-                    }
-                }
-                // composition !
-                try this.stereo_view.endFrame(
-                    frameState.predictedDisplayTime,
-                    this.blend_mode,
-                    if (layer_projection) |*l|
-                        @ptrCast(l)
-                    else
-                        null,
-                );
+                try this.stereo_view.composite(frameState, this.session.space, renderer, cubes);
             } else {
                 // Throttle loop since xrWaitFrame won't be called.
                 std.Thread.sleep(std.time.ns_per_ms * 250);

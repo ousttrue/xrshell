@@ -7,40 +7,12 @@ const Window = @import("window/WindowAndroidOpenGLES.zig");
 const binding = @import("gfx/graphicsplugin_opengles.zig").binding;
 const Renderer = @import("gfx/RendererOpenGLES.zig");
 const App = @import("App.zig");
+const android_logger = @import("android/android_logger.zig");
 
 pub const std_options: std.Options = .{
-    .logFn = logFn,
+    .logFn = android_logger.logFn,
     .log_level = .debug,
 };
-
-pub fn logFn(
-    comptime message_level: std.log.Level,
-    comptime scope: @Type(.enum_literal),
-    comptime format: []const u8,
-    args: anytype,
-) void {
-    const priority = switch (message_level) {
-        .err => c.ANDROID_LOG_ERROR,
-        .warn => c.ANDROID_LOG_WARN,
-        .info => c.ANDROID_LOG_INFO,
-        .debug => c.ANDROID_LOG_DEBUG,
-    };
-    const prefix = if (scope == .default) "" else "(" ++ @tagName(scope) ++ "): ";
-
-    var buf = std.io.FixedBufferStream([4 * 1024]u8){
-        .buffer = undefined,
-        .pos = 0,
-    };
-    var writer = buf.writer();
-    writer.print(prefix ++ format, args) catch {};
-
-    if (buf.pos >= buf.buffer.len) {
-        buf.pos = buf.buffer.len - 1;
-    }
-    buf.buffer[buf.pos] = 0;
-
-    _ = c.__android_log_write(priority, "hello_xr", &buf.buffer);
-}
 
 fn ShowHelp() void {
     std.log.info("adb shell setprop debug.xr.graphicsPlugin OpenGLES|Vulkan", .{});
@@ -161,10 +133,12 @@ export fn android_main(app: *c.android_app) void {
     var xr_app = App.init(
         allocator,
         &binding.extensions,
+        &binding.requirements,
         &instanceCreateInfoAndroid,
         options.FormFactor,
         options.ViewConfigType,
-        binding.makeBinding(window.context),
+        @ptrCast(&binding.makeBinding(window.context)),
+        binding.getSupportedSwapchainSampleCount(),
         options.AppSpace,
     ) catch @panic("App.init");
     defer xr_app.deinit();
