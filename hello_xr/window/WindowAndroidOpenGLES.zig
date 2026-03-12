@@ -30,9 +30,7 @@ const ksGpuContext = struct {
 };
 
 const ksGpuSurfaceColorFormat = enum { R5G6B5, B5G6R5, R8G8B8A8, B8G8R8A8, MAX };
-
 const ksGpuSurfaceDepthFormat = enum { NONE, D16, D24, MAX };
-
 const ksGpuSampleCount = enum(u8) {
     _1 = 1,
     _2 = 2,
@@ -50,24 +48,6 @@ const ksGpuWindowInput = struct {
     mouseInputY: [8]c_int,
 };
 
-const ksGpuWindow = struct {
-    device: ksGpuDevice,
-    context: ksGpuContext,
-    colorFormat: ksGpuSurfaceColorFormat,
-    depthFormat: ksGpuSurfaceDepthFormat,
-    sampleCount: ksGpuSampleCount,
-    windowWidth: c_int,
-    windowHeight: c_int,
-    windowSwapInterval: c_int,
-    windowRefreshRate: f32,
-    windowFullscreen: bool,
-    windowActive: bool,
-    windowExit: bool,
-    input: ksGpuWindowInput,
-
-    // Java_t: c.java,
-};
-
 const ksGpuSurfaceBits = struct {
     redBits: u8,
     greenBits: u8,
@@ -77,107 +57,90 @@ const ksGpuSurfaceBits = struct {
     depthBits: u8,
 };
 
-// Initialize the gl extensions. Note we have to open a window.
-var m_window: ksGpuWindow = undefined;
-var m_driverInstance: ksDriverInstance = undefined;
-var m_queueInfo: ksGpuQueueInfo = undefined;
-var m_colorFormat: ksGpuSurfaceColorFormat = .B8G8R8A8;
-var m_depthFormat: ksGpuSurfaceDepthFormat = .D24;
-var m_sampleCount: ksGpuSampleCount = ._1;
-var m_graphicsBinding: c.XrGraphicsBindingOpenGLESAndroidKHR = .{ .type = c.XR_TYPE_GRAPHICS_BINDING_OPENGL_ES_ANDROID_KHR, .next = null };
+// // Initialize the gl extensions. Note we have to open a window.
+// var m_window: ksGpuWindow = undefined;
+// var m_driverInstance: ksDriverInstance = undefined;
+// var m_queueInfo: ksGpuQueueInfo = undefined;
+// var m_colorFormat: ksGpuSurfaceColorFormat = .B8G8R8A8;
+// var m_depthFormat: ksGpuSurfaceDepthFormat = .D24;
+// var m_sampleCount: ksGpuSampleCount = ._1;
+// var m_graphicsBinding: c.XrGraphicsBindingOpenGLESAndroidKHR = .{ .type = c.XR_TYPE_GRAPHICS_BINDING_OPENGL_ES_ANDROID_KHR, .next = null };
+//
+// pub const extensions = [_][*:0]const u8{
+//     c.XR_KHR_OPENGL_ES_ENABLE_EXTENSION_NAME,
+// };
 
-pub const extensions = [_][*:0]const u8{
-    c.XR_KHR_OPENGL_ES_ENABLE_EXTENSION_NAME,
-};
-
-pub fn init() void {
-    m_window = undefined;
-    m_driverInstance = undefined;
-    m_queueInfo = undefined;
-    m_colorFormat = .B8G8R8A8;
-    m_depthFormat = .D24;
-    m_sampleCount = ._1;
-
-    if (!ksGpuWindow_Create(&m_window, &m_driverInstance, &m_queueInfo, 0, m_colorFormat, m_depthFormat, m_sampleCount, 640, 480, false)) {
-        @panic("Unable to create GL context");
-    }
-
-    m_graphicsBinding.display = m_window.context.dpy;
-    m_graphicsBinding.config = null;
-    m_graphicsBinding.context = m_window.context.ctx;
-}
-
-pub fn binding() *c.XrBaseInStructure {
-    return @ptrCast(&m_graphicsBinding);
-}
-
-// ================================================================================================================================
-// OpenGL extensions.
-// ================================================================================================================================
-
-// #if defined(OS_ANDROID)
+// pub fn binding() *c.XrBaseInStructure {
+//     return @ptrCast(&m_graphicsBinding);
+// }
 //
-// // GL_EXT_disjoint_timer_query without _EXT
-// #if !defined(GL_TIMESTAMP)
-// #define GL_QUERY_COUNTER_BITS GL_QUERY_COUNTER_BITS_EXT
-// #define GL_TIME_ELAPSED GL_TIME_ELAPSED_EXT
-// #define GL_TIMESTAMP GL_TIMESTAMP_EXT
-// #define GL_GPU_DISJOINT GL_GPU_DISJOINT_EXT
-// #endif
+// // ================================================================================================================================
+// // OpenGL extensions.
+// // ================================================================================================================================
 //
-// // GL_EXT_buffer_storage without _EXT
-// #if !defined(GL_BUFFER_STORAGE_FLAGS)
-// #define GL_MAP_READ_BIT 0x0001                          // GL_MAP_READ_BIT_EXT
-// #define GL_MAP_WRITE_BIT 0x0002                         // GL_MAP_WRITE_BIT_EXT
-// #define GL_MAP_PERSISTENT_BIT 0x0040                    // GL_MAP_PERSISTENT_BIT_EXT
-// #define GL_MAP_COHERENT_BIT 0x0080                      // GL_MAP_COHERENT_BIT_EXT
-// #define GL_DYNAMIC_STORAGE_BIT 0x0100                   // GL_DYNAMIC_STORAGE_BIT_EXT
-// #define GL_CLIENT_STORAGE_BIT 0x0200                    // GL_CLIENT_STORAGE_BIT_EXT
-// #define GL_CLIENT_MAPPED_BUFFER_BARRIER_BIT 0x00004000  // GL_CLIENT_MAPPED_BUFFER_BARRIER_BIT_EXT
-// #define GL_BUFFER_IMMUTABLE_STORAGE 0x821F              // GL_BUFFER_IMMUTABLE_STORAGE_EXT
-// #define GL_BUFFER_STORAGE_FLAGS 0x8220                  // GL_BUFFER_STORAGE_FLAGS_EXT
-// #endif
+// // #if defined(OS_ANDROID)
+// //
+// // // GL_EXT_disjoint_timer_query without _EXT
+// // #if !defined(GL_TIMESTAMP)
+// // #define GL_QUERY_COUNTER_BITS GL_QUERY_COUNTER_BITS_EXT
+// // #define GL_TIME_ELAPSED GL_TIME_ELAPSED_EXT
+// // #define GL_TIMESTAMP GL_TIMESTAMP_EXT
+// // #define GL_GPU_DISJOINT GL_GPU_DISJOINT_EXT
+// // #endif
+// //
+// // // GL_EXT_buffer_storage without _EXT
+// // #if !defined(GL_BUFFER_STORAGE_FLAGS)
+// // #define GL_MAP_READ_BIT 0x0001                          // GL_MAP_READ_BIT_EXT
+// // #define GL_MAP_WRITE_BIT 0x0002                         // GL_MAP_WRITE_BIT_EXT
+// // #define GL_MAP_PERSISTENT_BIT 0x0040                    // GL_MAP_PERSISTENT_BIT_EXT
+// // #define GL_MAP_COHERENT_BIT 0x0080                      // GL_MAP_COHERENT_BIT_EXT
+// // #define GL_DYNAMIC_STORAGE_BIT 0x0100                   // GL_DYNAMIC_STORAGE_BIT_EXT
+// // #define GL_CLIENT_STORAGE_BIT 0x0200                    // GL_CLIENT_STORAGE_BIT_EXT
+// // #define GL_CLIENT_MAPPED_BUFFER_BARRIER_BIT 0x00004000  // GL_CLIENT_MAPPED_BUFFER_BARRIER_BIT_EXT
+// // #define GL_BUFFER_IMMUTABLE_STORAGE 0x821F              // GL_BUFFER_IMMUTABLE_STORAGE_EXT
+// // #define GL_BUFFER_STORAGE_FLAGS 0x8220                  // GL_BUFFER_STORAGE_FLAGS_EXT
+// // #endif
+// //
+// // #if !defined(EGL_OPENGL_ES3_BIT)
+// // #define EGL_OPENGL_ES3_BIT 0x0040
+// // #endif
+// //
+// // // GL_EXT_texture_cube_map_array
+// // #if !defined(GL_TEXTURE_CUBE_MAP_ARRAY)
+// // #define GL_TEXTURE_CUBE_MAP_ARRAY 0x9009
+// // #endif
+// //
+// // // GL_EXT_texture_filter_anisotropic
+// // #if !defined(GL_TEXTURE_MAX_ANISOTROPY_EXT)
+// // #define GL_TEXTURE_MAX_ANISOTROPY_EXT 0x84FE
+// // #define GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT 0x84FF
+// // #endif
+// //
+// // // GL_EXT_texture_border_clamp or GL_OES_texture_border_clamp
+// // #if !defined(GL_CLAMP_TO_BORDER)
+// // #define GL_CLAMP_TO_BORDER 0x812D
+// // #endif
+// //
+// // // No 1D textures in OpenGL ES.
+// // #if !defined(GL_TEXTURE_1D)
+// // #define GL_TEXTURE_1D 0x0DE0
+// // #endif
+// //
+// // // No 1D texture arrays in OpenGL ES.
+// // #if !defined(GL_TEXTURE_1D_ARRAY)
+// // #define GL_TEXTURE_1D_ARRAY 0x8C18
+// // #endif
+// //
+// // // No multi-sampled texture arrays in OpenGL ES.
+// // #if !defined(GL_TEXTURE_2D_MULTISAMPLE_ARRAY)
+// // #define GL_TEXTURE_2D_MULTISAMPLE_ARRAY 0x9102
+// // #endif
+// //
+// // #endif
 //
-// #if !defined(EGL_OPENGL_ES3_BIT)
-// #define EGL_OPENGL_ES3_BIT 0x0040
-// #endif
-//
-// // GL_EXT_texture_cube_map_array
-// #if !defined(GL_TEXTURE_CUBE_MAP_ARRAY)
-// #define GL_TEXTURE_CUBE_MAP_ARRAY 0x9009
-// #endif
-//
-// // GL_EXT_texture_filter_anisotropic
-// #if !defined(GL_TEXTURE_MAX_ANISOTROPY_EXT)
-// #define GL_TEXTURE_MAX_ANISOTROPY_EXT 0x84FE
-// #define GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT 0x84FF
-// #endif
-//
-// // GL_EXT_texture_border_clamp or GL_OES_texture_border_clamp
-// #if !defined(GL_CLAMP_TO_BORDER)
-// #define GL_CLAMP_TO_BORDER 0x812D
-// #endif
-//
-// // No 1D textures in OpenGL ES.
-// #if !defined(GL_TEXTURE_1D)
-// #define GL_TEXTURE_1D 0x0DE0
-// #endif
-//
-// // No 1D texture arrays in OpenGL ES.
-// #if !defined(GL_TEXTURE_1D_ARRAY)
-// #define GL_TEXTURE_1D_ARRAY 0x8C18
-// #endif
-//
-// // No multi-sampled texture arrays in OpenGL ES.
-// #if !defined(GL_TEXTURE_2D_MULTISAMPLE_ARRAY)
-// #define GL_TEXTURE_2D_MULTISAMPLE_ARRAY 0x9102
-// #endif
-//
-// #endif
-
-// ================================================================================================================================
-// GPU Device.
-// ================================================================================================================================
+// // ================================================================================================================================
+// // GPU Device.
+// // ================================================================================================================================
 fn ksGpuDevice_Create(device: *ksGpuDevice, instance: *ksDriverInstance, queueInfo: *const ksGpuQueueInfo) bool {
     // Use an extensions to select the appropriate device:
     // https://www.opengl.org/registry/specs/NV/gpu_affinity.txt
@@ -197,11 +160,10 @@ fn ksGpuDevice_Create(device: *ksGpuDevice, instance: *ksDriverInstance, queueIn
     return true;
 }
 
-// void ksGpuDevice_Destroy(ksGpuDevice *device) { memset(device, 0, sizeof(ksGpuDevice)); }
+fn ksGpuDevice_Destroy(device: *ksGpuDevice) void {
+    device.* = undefined;
+}
 
-// ================================================================================================================================
-// GPU Context.
-// ================================================================================================================================
 fn ksGpuContext_BitsForSurfaceFormat(colorFormat: ksGpuSurfaceColorFormat, depthFormat: ksGpuSurfaceDepthFormat) ksGpuSurfaceBits {
     var bits: ksGpuSurfaceBits = .{
         .redBits = (if (colorFormat == .R8G8B8A8)
@@ -278,60 +240,36 @@ fn EGL(func: c_uint) void {
     }
 }
 
-// void ksGpuContext_Destroy(ksGpuContext *context) {
-// #elif defined(OS_ANDROID) || defined(OS_LINUX_WAYLAND)
-//     if (context.ctx != EGL_NO_CONTEXT) {
-//         EGL(eglDestroyContext(context.dpy, context.ctx));
-//     }
-//
-//     if (context.dpy != EGL_NO_DISPLAY) {
-//         EGL(eglTerminate(context.dpy));
-//     }
-//
-//     context.dpy = EGL_NO_DISPLAY;
-//     context.ctx = EGL_NO_CONTEXT;
-//
-// }
+fn ksGpuContext_Destroy(context: *ksGpuContext) void {
+    if (context.ctx != c.EGL_NO_CONTEXT) {
+        EGL(c.eglDestroyContext(context.dpy, context.ctx));
+    }
+
+    if (context.dpy != c.EGL_NO_DISPLAY) {
+        EGL(c.eglTerminate(context.dpy));
+    }
+
+    context.dpy = c.EGL_NO_DISPLAY;
+    context.ctx = c.EGL_NO_CONTEXT;
+}
 
 fn ksGpuContext_SetCurrent(context: *ksGpuContext) void {
     EGL(c.eglMakeCurrent(context.dpy, c.EGL_NO_SURFACE, c.EGL_NO_SURFACE, context.ctx));
 }
 
-// void ksGpuContext_UnsetCurrent(ksGpuContext *context) {
-// #elif defined(OS_ANDROID) || defined(OS_LINUX_WAYLAND)
-//     EGL(eglMakeCurrent(context.dpy, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT));
-// }
-
-// bool ksGpuContext_CheckCurrent(ksGpuContext *context) {
-// #elif defined(OS_ANDROID) || defined(OS_LINUX_WAYLAND)
-//     return (eglGetCurrentContext() == context.ctx);
-// #else
-
-// ================================================================================================================================
-// GPU Window.
-// ================================================================================================================================
-
-// #elif defined(OS_ANDROID)
+// // void ksGpuContext_UnsetCurrent(ksGpuContext *context) {
+// // #elif defined(OS_ANDROID) || defined(OS_LINUX_WAYLAND)
+// //     EGL(eglMakeCurrent(context.dpy, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT));
+// // }
 //
-// void ksGpuWindow_Destroy(ksGpuWindow *window) {
-//     ksGpuContext_Destroy(&window.context);
-//     ksGpuDevice_Destroy(&window.device);
-// }
-
-fn ksGpuWindow_Create(
-    window: *ksGpuWindow,
-    instance: *ksDriverInstance,
-    queueInfo: *const ksGpuQueueInfo,
-    queueIndex: c_int,
-    colorFormat: ksGpuSurfaceColorFormat,
-    depthFormat: ksGpuSurfaceDepthFormat,
-    sampleCount: ksGpuSampleCount,
-    width: c_int,
-    height: c_int,
-    fullscreen: bool,
-) bool {
-    return ksGpuWindow_CreateEGL(window, instance, queueInfo, queueIndex, colorFormat, depthFormat, sampleCount, width, height, fullscreen);
-}
+// // bool ksGpuContext_CheckCurrent(ksGpuContext *context) {
+// // #elif defined(OS_ANDROID) || defined(OS_LINUX_WAYLAND)
+// //     return (eglGetCurrentContext() == context.ctx);
+// // #else
+//
+// // ================================================================================================================================
+// // GPU Window.
+// // ================================================================================================================================
 
 const OPENGLES_VERSION_MAJOR = 3;
 
@@ -388,26 +326,32 @@ fn ksGpuContext_CreateForSurfaceEGL(
     return true;
 }
 
-fn ksGpuWindow_CreateEGL(
-    window: *ksGpuWindow,
-    instance: *ksDriverInstance,
-    queueInfo: *const ksGpuQueueInfo,
-    queueIndex: c_int,
-    colorFormat: ksGpuSurfaceColorFormat,
-    depthFormat: ksGpuSurfaceDepthFormat,
-    sampleCount: ksGpuSampleCount,
-    width: c_int,
-    height: c_int,
-    fullscreen: bool,
-) bool {
-    _ = fullscreen;
+allocator: std.mem.Allocator,
+device: ksGpuDevice,
+context: ksGpuContext,
+colorFormat: ksGpuSurfaceColorFormat,
+depthFormat: ksGpuSurfaceDepthFormat,
+sampleCount: ksGpuSampleCount,
+windowWidth: c_int,
+windowHeight: c_int,
+windowSwapInterval: c_int,
+windowRefreshRate: f32,
+windowFullscreen: bool,
+windowActive: bool,
+windowExit: bool,
+input: ksGpuWindowInput,
 
-    window.* = .{
-        .colorFormat = colorFormat,
-        .depthFormat = depthFormat,
-        .sampleCount = sampleCount,
-        .windowWidth = width,
-        .windowHeight = height,
+// Java_t: c.java,
+
+pub fn create(allocator: std.mem.Allocator) *@This() {
+    const this = allocator.create(@This()) catch @panic("OOM");
+    this.* = .{
+        .allocator = allocator,
+        .colorFormat = .B8G8R8A8,
+        .depthFormat = .D24,
+        .sampleCount = ._1,
+        .windowWidth = 640,
+        .windowHeight = 480,
         .windowSwapInterval = 1,
         .windowRefreshRate = 60.0,
         .windowFullscreen = true,
@@ -443,12 +387,30 @@ fn ksGpuWindow_CreateEGL(
     //     std.log.info("Loaded EGL {}.{} after reload.", .{ c.GLAD_VERSION_MAJOR(eglVersion), c.GLAD_VERSION_MINOR(eglVersion) });
     // }
 
-    _ = ksGpuDevice_Create(&window.device, instance, queueInfo);
-    _ = ksGpuContext_CreateForSurfaceEGL(&window.context, &window.device, queueIndex, colorFormat, depthFormat, sampleCount, dpy);
+    _ = ksGpuDevice_Create(&this.device, this.device.instance, &this.device.queueInfo);
+    const queueIndex = 0;
+    _ = ksGpuContext_CreateForSurfaceEGL(
+        &this.context,
+        &this.device,
+        queueIndex,
+        this.colorFormat,
+        this.depthFormat,
+        this.sampleCount,
+        dpy,
+    );
 
-    ksGpuContext_SetCurrent(&window.context);
+    ksGpuContext_SetCurrent(&this.context);
 
     // _ = c.gladLoaderLoadGLES2();
 
-    return true;
+    //     m_graphicsBinding.display = m_window.context.dpy;
+    //     m_graphicsBinding.config = null;
+    //     m_graphicsBinding.context = m_window.context.ctx;
+
+    return this;
+}
+
+pub fn destroy(this: *@This()) void {
+    ksGpuContext_Destroy(&this.context);
+    ksGpuDevice_Destroy(&this.device);
 }

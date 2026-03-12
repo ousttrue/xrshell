@@ -3,6 +3,7 @@ const c = @import("c");
 const xrs = @import("xrshell/xrshell.zig");
 const XrError = xrs.XrError;
 const XrResult = xrs.XrResult;
+const Window = @import("window/WindowAndroidOpenGLES.zig");
 const gfx = @import("gfx/graphicsplugin_opengles.zig");
 const Renderer = @import("gfx/RendererOpenGL4.zig");
 
@@ -134,7 +135,9 @@ export fn android_main(app: *c.android_app) void {
         return;
     }
 
-    _ = allocator;
+    var window = Window.create(allocator);
+    defer window.destroy();
+
     // Initialize the loader for this platform
     var initializeLoader: c.PFN_xrInitializeLoaderKHR = null;
     if (c.XR_SUCCEEDED(c.xrGetInstanceProcAddr(null, "xrInitializeLoaderKHR", &initializeLoader))) {
