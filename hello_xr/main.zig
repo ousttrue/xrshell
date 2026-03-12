@@ -66,6 +66,7 @@ const App = struct {
     renderer: Renderer,
     view_config_type: c.XrViewConfigurationType,
     blend_mode: c.XrEnvironmentBlendMode,
+    isSessionRunning: bool = false,
 
     fn init(
         allocator: std.mem.Allocator,
@@ -200,7 +201,7 @@ const App = struct {
         quit,
         restart,
     } {
-        var isSessionRunning = false;
+        this.isSessionRunning = false;
         std.log.warn("Loop start", .{});
         while (!quit_key.*) {
             switch (try this.instance.pollEvents()) {
@@ -211,7 +212,7 @@ const App = struct {
                     return .restart;
                 },
                 .next => {
-                    if (isSessionRunning) {
+                    if (this.isSessionRunning) {
                         try this.action.pollActions();
                         //
                         // begin frame !
@@ -277,11 +278,11 @@ const App = struct {
                 },
                 .session_begin => {
                     try this.session.begin(this.view_config_type);
-                    isSessionRunning = true;
+                    this.isSessionRunning = true;
                 },
                 .session_end => {
                     try this.session.end();
-                    isSessionRunning = false;
+                    this.isSessionRunning = false;
                 },
             }
         }
