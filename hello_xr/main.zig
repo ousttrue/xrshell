@@ -6,10 +6,10 @@ const XrError = xrs.XrError;
 const XrResult = xrs.XrResult;
 const QuitKeyObserver = @import("QuitKeyObserver.zig");
 const console_color_logger = @import("console_color_logger.zig");
-const gfx = if (builtin.os.tag == .windows)
+const binding = if (builtin.os.tag == .windows)
     @import("gfx/graphicsplugin_opengl.zig")
 else
-    @import("gfx/graphicsplugin_opengles.zig");
+    @import("gfx/graphicsplugin_opengles.zig").binding;
 const Window = @import("window/window.zig").Window;
 const Renderer = @import("gfx/RendererOpenGL4.zig");
 const App = @import("App.zig");
@@ -41,11 +41,13 @@ pub fn main() !void {
 
         var app: App = try .init(
             allocator,
-            &gfx.extensions,
+            &binding.extensions,
+            &binding.requirements,
             null,
             options.FormFactor,
             options.ViewConfigType,
-            gfx.makeBinding(window.context),
+            @ptrCast(&binding.makeBinding(window.context)),
+            binding.getSupportedSwapchainSampleCount(),
             options.AppSpace,
         );
         defer app.deinit();

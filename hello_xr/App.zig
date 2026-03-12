@@ -4,10 +4,6 @@ const c = @import("c");
 const xrs = @import("xrshell/xrshell.zig");
 const XrError = xrs.XrError;
 const XrResult = xrs.XrResult;
-const binding = if (builtin.os.tag == .windows)
-    @import("gfx/graphicsplugin_opengl.zig")
-else
-    @import("gfx/graphicsplugin_opengles.zig").binding;
 
 allocator: std.mem.Allocator,
 instance: xrs.Instance,
@@ -22,10 +18,12 @@ isSessionRunning: bool = false,
 pub fn init(
     allocator: std.mem.Allocator,
     gfx_extensions: []const [*:0]const u8,
+    requirements: *const fn (instance: c.XrInstance, systemId: c.XrSystemId) XrError!void,
     instance_create_info: ?*const anyopaque,
     form_factor: c.XrFormFactor,
     view_config_type: c.XrViewConfigurationType,
-    gfx_binding: binding.GraphicsBinding,
+    gfx_binding: *const c.XrBaseInStructure,
+    sample_count: u32,
     app_space: xrs.ReferenceSpaceType,
 ) !@This() {
     const instance = try xrs.Instance.init(allocator, .{
@@ -37,13 +35,13 @@ pub fn init(
     const blend_mode = try instance.getPreferredBlendMode(view_config_type);
     try instance.logViewConfigurations(view_config_type, blend_mode);
 
-    try binding.requirements(instance.instance, instance.systemId);
+    try requirements(instance.instance, instance.systemId);
 
     const session = try xrs.Session.init(
         allocator,
         instance.instance,
         instance.systemId,
-        @ptrCast(&gfx_binding),
+        gfx_binding,
         app_space,
     );
 
@@ -56,7 +54,7 @@ pub fn init(
         session.session,
         view_config_type,
         session.swapchainFormats,
-        binding.getSupportedSwapchainSampleCount(),
+        sample_count,
     );
 
     return .{
