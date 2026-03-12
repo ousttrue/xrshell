@@ -4,6 +4,10 @@ const xr_result = @import("xr_result.zig");
 const XrError = xr_result.XrError;
 const XrResult = xr_result.XrResult;
 const c = @import("c");
+const binding = if (builtin.os.tag == .windows)
+    @import("../gfx/graphicsplugin_opengl.zig")
+else
+    @import("../gfx/graphicsplugin_opengles.zig").binding;
 
 const Swapchain = struct {
     handle: c.XrSwapchain,
@@ -21,6 +25,8 @@ configViews: std.ArrayList(c.XrViewConfigurationView) = .{},
 views: std.ArrayList(c.XrView) = .{},
 colorSwapchainFormat: i64,
 sampleCount: u32,
+swapchainImages: std.ArrayList([]*c.XrSwapchainImageBaseHeader) = .{},
+swapchainImageBuffers: std.ArrayList([]@TypeOf(binding.swapchain_image)) = .{},
 
 pub fn init(
     allocator: std.mem.Allocator,
@@ -28,9 +34,12 @@ pub fn init(
     systemId: c.XrSystemId,
     session: c.XrSession,
     view_config_type: c.XrViewConfigurationType,
-    colorSwapchainFormat: i64,
+    swapchainFormats: []i64,
     sampleCount: u32,
 ) !@This() {
+    // Select a swapchain format.
+    const colorSwapchainFormat = try binding.selectColorSwapchainFormat(allocator, swapchainFormats);
+
     std.log.info("## OpenXrProgram.init ##", .{});
 
     var this: @This() = .{
@@ -42,13 +51,24 @@ pub fn init(
         .sampleCount = sampleCount,
     };
 
+    this.logFormats(swapchainFormats, colorSwapchainFormat);
     try this.CreateSwapchains(view_config_type);
+    try this.makeSwapchain();
 
     return this;
 }
 
 pub fn deinit(this: *@This()) void {
     std.log.info("## OpenXrProgram.deinit ##", .{});
+
+    for (this.swapchainImageBuffers.items) |image| {
+        this.allocator.free(image);
+    }
+    this.swapchainImageBuffers.deinit(this.allocator);
+    for (this.swapchainImages.items) |image| {
+        this.allocator.free(image);
+    }
+    this.swapchainImages.deinit(this.allocator);
 
     this.configViews.deinit(this.allocator);
 
@@ -58,6 +78,62 @@ pub fn deinit(this: *@This()) void {
     this.swapchains.deinit(this.allocator);
 
     this.views.deinit(this.allocator);
+}
+
+pub fn getTexture(this: *@This(), view_index: usize, swapchain_image_index: u32) u32 {
+    const entry = this.swapchainImages.items[view_index];
+    const swapchain_image = entry[swapchain_image_index];
+    return @as(*const @TypeOf(binding.swapchain_image), @ptrCast(swapchain_image)).image;
+}
+
+fn makeSwapchain(this: *@This()) !void {
+    for (this.swapchains.items) |swapchain| {
+        var imageCount: u32 = undefined;
+        _ = try XrResult.init(c.xrEnumerateSwapchainImages(swapchain.handle, 0, &imageCount, null));
+        const swapchainImageBuffer = try this.allocator.alloc(@TypeOf(binding.swapchain_image), imageCount);
+        const swapchainImageBase = try this.allocator.alloc(*c.XrSwapchainImageBaseHeader, imageCount);
+        for (swapchainImageBase, swapchainImageBuffer) |*base, *buf| {
+            base.* = @ptrCast(buf);
+            buf.* = binding.swapchain_image;
+        }
+        _ = try XrResult.init(c.xrEnumerateSwapchainImages(
+            swapchain.handle,
+            @intCast(swapchainImageBuffer.len),
+            &imageCount,
+            @ptrCast(swapchainImageBuffer.ptr),
+        ));
+        // Keep the buffer alive
+        try this.swapchainImages.append(this.allocator, swapchainImageBase);
+        try this.swapchainImageBuffers.append(this.allocator, swapchainImageBuffer);
+    }
+}
+
+// Print swapchain formats and the selected one.
+fn logFormats(
+    this: *const @This(),
+    swapchainFormats: []i64,
+    colorSwapchainFormat: i64,
+) void {
+    // const swapchainFormatsString: []const u8 = "";
+    var out = std.Io.Writer.Allocating.init(this.allocator);
+    defer out.deinit();
+    // std.io.Writer を値渡しすると壊れる
+    var w: *std.io.Writer = &out.writer;
+
+    for (swapchainFormats) |format| {
+        const selected = format == colorSwapchainFormat;
+        w.writeAll(" ") catch @panic("OOM");
+        if (selected) {
+            w.writeAll("[") catch @panic("OOM");
+        }
+        w.print("{}", .{format}) catch @panic("OM");
+        if (selected) {
+            w.writeAll("]") catch @panic("OOM");
+        }
+    }
+    const str = out.toOwnedSlice() catch @panic("OOM");
+    defer this.allocator.free(str);
+    std.log.debug("Swapchain Formats: {s}", .{str});
 }
 
 fn makeIndent(allocator: std.mem.Allocator, indent: usize) ![]const u8 {

@@ -4,7 +4,7 @@ const c = @import("c");
 const xrs = @import("xrshell/xrshell.zig");
 const XrError = xrs.XrError;
 const XrResult = xrs.XrResult;
-const binding = if(builtin.os.tag==.windows)
+const binding = if (builtin.os.tag == .windows)
     @import("gfx/graphicsplugin_opengl.zig")
 else
     @import("gfx/graphicsplugin_opengles.zig").binding;
@@ -14,8 +14,6 @@ instance: xrs.Instance,
 session: xrs.Session,
 action: xrs.Action,
 stereo_view: xrs.StereoView,
-swapchainImageBuffers: std.ArrayList([]@TypeOf(binding.swapchain_image)) = .{},
-swapchainImages: std.ArrayList([]*c.XrSwapchainImageBaseHeader) = .{},
 projectionLayerViews: std.ArrayList(c.XrCompositionLayerProjectionView) = .{},
 view_config_type: c.XrViewConfigurationType,
 blend_mode: c.XrEnvironmentBlendMode,
@@ -49,9 +47,6 @@ pub fn init(
         app_space,
     );
 
-    // Select a swapchain format.
-    const colorSwapchainFormat = try binding.selectColorSwapchainFormat(allocator, session.swapchainFormats);
-
     const action = try xrs.Action.init(allocator, instance.instance, session.session);
 
     const stereo_view = try xrs.StereoView.init(
@@ -60,11 +55,11 @@ pub fn init(
         instance.systemId,
         session.session,
         view_config_type,
-        colorSwapchainFormat,
+        session.swapchainFormats,
         binding.getSupportedSwapchainSampleCount(),
     );
 
-    var this: @This() = .{
+    return .{
         .allocator = allocator,
         .instance = instance,
         .session = session,
@@ -73,76 +68,15 @@ pub fn init(
         .view_config_type = view_config_type,
         .blend_mode = blend_mode,
     };
-    this.logFormats(colorSwapchainFormat);
-    try this.makeSwapchain();
-
-    return this;
 }
 
 pub fn deinit(this: *@This()) void {
     this.projectionLayerViews.deinit(this.allocator);
-    for (this.swapchainImageBuffers.items) |image| {
-        this.allocator.free(image);
-    }
-    this.swapchainImageBuffers.deinit(this.allocator);
-    for (this.swapchainImages.items) |image| {
-        this.allocator.free(image);
-    }
-    this.swapchainImages.deinit(this.allocator);
 
     this.stereo_view.deinit();
     this.action.deinit();
     this.session.deinit();
     this.instance.deinit();
-}
-
-fn makeSwapchain(this: *@This()) !void {
-    for (this.stereo_view.swapchains.items) |swapchain| {
-        var imageCount: u32 = undefined;
-        _ = try XrResult.init(c.xrEnumerateSwapchainImages(swapchain.handle, 0, &imageCount, null));
-        const swapchainImageBuffer = try this.allocator.alloc(@TypeOf(binding.swapchain_image), imageCount);
-        const swapchainImageBase = try this.allocator.alloc(*c.XrSwapchainImageBaseHeader, imageCount);
-        for (swapchainImageBase, swapchainImageBuffer) |*base, *buf| {
-            base.* = @ptrCast(buf);
-            buf.* = binding.swapchain_image;
-        }
-        _ = try XrResult.init(c.xrEnumerateSwapchainImages(
-            swapchain.handle,
-            @intCast(swapchainImageBuffer.len),
-            &imageCount,
-            @ptrCast(swapchainImageBuffer.ptr),
-        ));
-        // Keep the buffer alive
-        try this.swapchainImages.append(this.allocator, swapchainImageBase);
-        try this.swapchainImageBuffers.append(this.allocator, swapchainImageBuffer);
-    }
-}
-
-// Print swapchain formats and the selected one.
-fn logFormats(
-    this: *const @This(),
-    colorSwapchainFormat: i64,
-) void {
-    // const swapchainFormatsString: []const u8 = "";
-    var out = std.Io.Writer.Allocating.init(this.allocator);
-    defer out.deinit();
-    // std.io.Writer を値渡しすると壊れる
-    var w: *std.io.Writer = &out.writer;
-
-    for (this.session.swapchainFormats) |format| {
-        const selected = format == colorSwapchainFormat;
-        w.writeAll(" ") catch @panic("OOM");
-        if (selected) {
-            w.writeAll("[") catch @panic("OOM");
-        }
-        w.print("{}", .{format}) catch @panic("OM");
-        if (selected) {
-            w.writeAll("]") catch @panic("OOM");
-        }
-    }
-    const str = out.toOwnedSlice() catch @panic("OOM");
-    defer this.allocator.free(str);
-    std.log.debug("Swapchain Formats: {s}", .{str});
 }
 
 pub fn run_frame(this: *@This(), renderer: anytype) !enum {
@@ -178,11 +112,7 @@ pub fn run_frame(this: *@This(), renderer: anytype) !enum {
                         for (0..this.stereo_view.swapchains.items.len) |i| {
                             const acquired = try this.stereo_view.acquireSwapchain(i);
                             this.projectionLayerViews.items[i] = acquired.projection_layer_view;
-
-                            const entry = this.swapchainImages.items[i];
-                            const swapchain_image = entry[acquired.swapchainImageIndex];
-                            const color_texture = @as(*const @TypeOf(binding.swapchain_image), @ptrCast(swapchain_image)).image;
-
+                            const color_texture = this.stereo_view.getTexture(i, acquired.swapchainImageIndex);
                             try renderer.renderView(
                                 &acquired.projection_layer_view,
                                 color_texture,
