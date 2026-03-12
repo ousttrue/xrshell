@@ -14,7 +14,7 @@ sessionState: c.XrSessionState = c.XR_SESSION_STATE_UNKNOWN,
 var version_str: [64]u8 = undefined;
 
 pub const Options = struct {
-    instance_create_info: ?*anyopaque = null,
+    instance_create_info: ?*const anyopaque = null,
     gfx_extensions: []const [*:0]const u8,
     form_factor: c.XrFormFactor,
 };

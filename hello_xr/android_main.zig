@@ -4,7 +4,7 @@ const xrs = @import("xrshell/xrshell.zig");
 const XrError = xrs.XrError;
 const XrResult = xrs.XrResult;
 const Window = @import("window/WindowAndroidOpenGLES.zig");
-const gfx = @import("gfx/graphicsplugin_opengles.zig");
+const binding = @import("gfx/graphicsplugin_opengles.zig").binding;
 const Renderer = @import("gfx/RendererOpenGL4.zig");
 
 pub const std_options: std.Options = .{
@@ -154,66 +154,56 @@ export fn android_main(app: *c.android_app) void {
         .applicationVM = @ptrCast(app.activity.*.vm),
         .applicationActivity = app.activity,
     };
-    _ = instanceCreateInfoAndroid;
 
-    // var requestRestart = false;
-    // var exitRenderLoop = false;
+    while (app.destroyRequested == 0) {
+        std.log.warn("New instance", .{});
 
-    // // Initialize the OpenXR program.
-    // OpenXrProgram.init(allocator, &options);
-    // defer OpenXrProgram.deinit(allocator);
+        var xr_app = App.init(
+            allocator,
+            &binding.extensions,
+            &instanceCreateInfoAndroid,
+            options.FormFactor,
+            options.ViewConfigType,
+            binding.makeBinding(window.context),
+            options.AppSpace,
+        ) catch @panic("App.init");
+        defer xr_app.deinit();
 
-    // OpenXrProgram.CreateInstance(allocator, &instanceCreateInfoAndroid) catch @panic("OpenXrProgram.CreateInstance");
-    // OpenXrProgram.InitializeSystem() catch |e| {
-    //     std.log.err("InitializeSystem => {s}", .{@errorName(e)});
-    //     return;
-    // };
-    //
-    // options.SetEnvironmentBlendMode(OpenXrProgram.GetPreferredBlendMode(allocator) catch @panic("OpenXrProgram.GetPreferredBlendMode"));
-    // _ = UpdateOptionsFromSystemProperties(&options);
-    // // platformPlugin.UpdateOptions(options);
-    // // graphicsPlugin.UpdateOptions(options);
-    //
-    // OpenXrProgram.InitializeDevice(allocator) catch @panic("OpenXrProgram.InitializeDevice");
-    // const session = OpenXrProgram.InitializeSession(allocator) catch @panic("OpenXrProgram.InitializeSession");
-    // OpenXrProgram.CreateSwapchains(allocator) catch @panic("OpenXrProgram.CreateSwapchains");
-    //
-    // while (app.destroyRequested == 0) {
-    //     // Read all pending events.
-    //     while (true) {
-    //         var events: c_int = undefined;
-    //         var source: ?*c.android_poll_source = null;
-    //         // If the timeout is zero, returns immediately without blocking.
-    //         // If the timeout is negative, waits indefinitely until an event appears.
-    //         const timeoutMilliseconds: c_int = if (!appState.Resumed and !OpenXrProgram.IsSessionRunning() and app.destroyRequested == 0) -1 else 0;
-    //         if (c.ALooper_pollAll(timeoutMilliseconds, null, &events, @ptrCast(&source)) < 0) {
-    //             break;
-    //         }
-    //
-    //         // Process this event.
-    //         if (source) |p| {
-    //             c.call_source_process(app, p);
-    //         }
-    //     }
-    //
-    //     OpenXrProgram.PollEvents(allocator, &exitRenderLoop, &requestRestart) catch @panic("OpenXrProgram.PollEvents");
-    //     if (exitRenderLoop) {
-    //         c.ANativeActivity_finish(app.activity);
-    //         continue;
-    //     }
-    //
-    //     if (!OpenXrProgram.IsSessionRunning()) {
-    //         // Throttle loop since xrWaitFrame won't be called.
-    //         std.Thread.sleep(std.time.ns_per_ms * 250);
-    //         continue;
-    //     }
-    //
-    //     action.PollActions(session) catch |e| {
-    //         std.log.err("PollActions => {s}", .{@errorName(e)});
-    //     };
-    //     OpenXrProgram.RenderFrame(allocator) catch @panic("OpenXrProgram.RenderFrame");
-    // }
-    //
+        // Read all pending events.
+        while (true) {
+            var events: c_int = undefined;
+            var source: ?*c.android_poll_source = null;
+            // If the timeout is zero, returns immediately without blocking.
+            // If the timeout is negative, waits indefinitely until an event appears.
+            const timeoutMilliseconds: c_int = if (!appState.Resumed and !xr_app.isSessionRunning and app.destroyRequested == 0) -1 else 0;
+            if (c.ALooper_pollAll(timeoutMilliseconds, null, &events, @ptrCast(&source)) < 0) {
+                break;
+            }
+
+            // Process this event.
+            if (source) |p| {
+                c.call_source_process(app, p);
+            }
+        }
+
+        //     OpenXrProgram.PollEvents(allocator, &exitRenderLoop, &requestRestart) catch @panic("OpenXrProgram.PollEvents");
+        //     if (exitRenderLoop) {
+        //         c.ANativeActivity_finish(app.activity);
+        //         continue;
+        //     }
+        //
+        //     if (!OpenXrProgram.IsSessionRunning()) {
+        //         // Throttle loop since xrWaitFrame won't be called.
+        //         std.Thread.sleep(std.time.ns_per_ms * 250);
+        //         continue;
+        //     }
+        //
+        //     action.PollActions(session) catch |e| {
+        //         std.log.err("PollActions => {s}", .{@errorName(e)});
+        //     };
+        //     OpenXrProgram.RenderFrame(allocator) catch @panic("OpenXrProgram.RenderFrame");
+    }
+
     // // app.activity.vm.DetachCurrentThread();
 }
 
@@ -223,7 +213,7 @@ const App = struct {
     session: xrs.Session,
     action: xrs.Action,
     stereo_view: xrs.StereoView,
-    swapchainImageBuffers: std.ArrayList([]@TypeOf(gfx.swapchain_image)) = .{},
+    swapchainImageBuffers: std.ArrayList([]@TypeOf(binding.swapchain_image)) = .{},
     swapchainImages: std.ArrayList([]*c.XrSwapchainImageBaseHeader) = .{},
     projectionLayerViews: std.ArrayList(c.XrCompositionLayerProjectionView) = .{},
     renderer: Renderer,
@@ -234,20 +224,22 @@ const App = struct {
     fn init(
         allocator: std.mem.Allocator,
         gfx_extensions: []const [*:0]const u8,
+        instance_create_info: ?*const anyopaque,
         form_factor: c.XrFormFactor,
         view_config_type: c.XrViewConfigurationType,
-        gfx_binding: gfx.Binding,
+        gfx_binding: binding.GraphicsBinding,
         app_space: xrs.ReferenceSpaceType,
     ) !@This() {
         const instance = try xrs.Instance.init(allocator, .{
             .gfx_extensions = gfx_extensions,
             .form_factor = form_factor,
+            .instance_create_info = instance_create_info,
         });
 
         const blend_mode = try instance.getPreferredBlendMode(view_config_type);
         try instance.logViewConfigurations(view_config_type, blend_mode);
 
-        try gfx.requirements(instance.instance, instance.systemId);
+        try binding.requirements(instance.instance, instance.systemId);
 
         const session = try xrs.Session.init(
             allocator,
@@ -258,7 +250,7 @@ const App = struct {
         );
 
         // Select a swapchain format.
-        const colorSwapchainFormat = try gfx.selectColorSwapchainFormat(allocator, session.swapchainFormats);
+        const colorSwapchainFormat = try binding.selectColorSwapchainFormat(allocator, session.swapchainFormats);
 
         const action = try xrs.Action.init(allocator, instance.instance, session.session);
 
@@ -269,7 +261,7 @@ const App = struct {
             session.session,
             view_config_type,
             colorSwapchainFormat,
-            gfx.getSupportedSwapchainSampleCount(),
+            binding.getSupportedSwapchainSampleCount(),
         );
 
         const renderer: Renderer = .init(allocator);
@@ -312,11 +304,11 @@ const App = struct {
         for (this.stereo_view.swapchains.items) |swapchain| {
             var imageCount: u32 = undefined;
             _ = try XrResult.init(c.xrEnumerateSwapchainImages(swapchain.handle, 0, &imageCount, null));
-            const swapchainImageBuffer = try this.allocator.alloc(@TypeOf(gfx.swapchain_image), imageCount);
+            const swapchainImageBuffer = try this.allocator.alloc(@TypeOf(binding.swapchain_image), imageCount);
             const swapchainImageBase = try this.allocator.alloc(*c.XrSwapchainImageBaseHeader, imageCount);
             for (swapchainImageBase, swapchainImageBuffer) |*base, *buf| {
                 base.* = @ptrCast(buf);
-                buf.* = gfx.swapchain_image;
+                buf.* = binding.swapchain_image;
             }
             _ = try XrResult.init(c.xrEnumerateSwapchainImages(
                 swapchain.handle,
@@ -399,7 +391,7 @@ const App = struct {
 
                                     const entry = this.swapchainImages.items[i];
                                     const swapchain_image = entry[acquired.swapchainImageIndex];
-                                    const color_texture = @as(*const @TypeOf(gfx.swapchain_image), @ptrCast(swapchain_image)).image;
+                                    const color_texture = @as(*const @TypeOf(binding.swapchain_image), @ptrCast(swapchain_image)).image;
 
                                     try this.renderer.renderView(
                                         &acquired.projection_layer_view,
