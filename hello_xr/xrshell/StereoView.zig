@@ -10,7 +10,7 @@ else
     @import("../gfx/graphicsplugin_opengles.zig").binding;
 const Cube = @import("../Cube.zig");
 const xr_util = @import("xr_util.zig");
-const Options = @import("Options.zig");
+const xr_types = @import("xr_types.zig");
 
 const Swapchain = struct {
     handle: c.XrSwapchain,
@@ -43,7 +43,7 @@ pub fn init(
     swapchainFormats: []i64,
     sampleCount: u32,
     view_config_type: c.XrViewConfigurationType,
-    app_space: Options.ReferenceSpaceType,
+    app_space: xr_types.AppSpaceType,
 ) !@This() {
     std.log.info("## StereoView.init ##", .{});
 

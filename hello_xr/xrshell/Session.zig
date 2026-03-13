@@ -4,7 +4,7 @@ const xr_result = @import("xr_result.zig");
 const XrResult = xr_result.XrResult;
 const XrError = xr_result.XrError;
 const xr_util = @import("xr_util.zig");
-const Options = @import("Options.zig");
+const xr_types = @import("xr_types.zig");
 
 allocator: std.mem.Allocator,
 session: c.XrSession = null,
@@ -39,7 +39,7 @@ pub fn init(
         this.swapchainFormats.ptr,
     ));
 
-    try this.logReferenceSpaces();
+    try xr_types.ReferenceSpaceType.log(allocator, this.session);
 
     return this;
 }
@@ -49,19 +49,6 @@ pub fn deinit(this: *@This()) void {
 
     this.allocator.free(this.swapchainFormats);
     _ = c.xrDestroySession(this.session);
-}
-
-fn logReferenceSpaces(this: *@This()) XrError!void {
-    var spaceCount: u32 = undefined;
-    _ = try XrResult.init(c.xrEnumerateReferenceSpaces(this.session, 0, &spaceCount, null));
-    const spaces = try this.allocator.alloc(c.XrReferenceSpaceType, spaceCount);
-    defer this.allocator.free(spaces);
-    _ = try XrResult.init(c.xrEnumerateReferenceSpaces(this.session, spaceCount, &spaceCount, spaces.ptr));
-
-    std.log.debug("Available reference spaces: {}", .{spaceCount});
-    for (spaces) |space| {
-        std.log.debug("  Name: {}", .{space});
-    }
 }
 
 pub fn begin(this: *@This(), view_config_type: c.XrViewConfigurationType) XrError!void {

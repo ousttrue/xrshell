@@ -4,6 +4,7 @@ const xr_result = @import("xr_result.zig");
 const XrResult = xr_result.XrResult;
 const XrError = xr_result.XrError;
 const xr_util = @import("xr_util.zig");
+const xr_types = @import("xr_types.zig");
 
 allocator: std.mem.Allocator,
 instance: c.XrInstance = null,
@@ -145,13 +146,13 @@ pub fn pollEvents(
             },
             c.XR_TYPE_EVENT_DATA_SESSION_STATE_CHANGED => {
                 const stateChangedEvent: *c.XrEventDataSessionStateChanged = @ptrCast(event);
-                const oldState = this.sessionState;
+                const oldState = @as(*const xr_types.SessionState, @ptrCast(&this.sessionState)).*;
+                const newState = @as(*const xr_types.SessionState, @ptrCast(&stateChangedEvent.state)).*;
                 this.sessionState = stateChangedEvent.state;
-                std.log.debug("XrEventDataSessionStateChanged: state {}->{} session={?} time={}", .{
-                    oldState,
-                    this.sessionState,
-                    stateChangedEvent.session,
+                std.log.debug("XrEventDataSessionStateChanged: time={}: {}->{}", .{
                     stateChangedEvent.time,
+                    oldState,
+                    newState,
                 });
 
                 // if ((stateChangedEvent.session != null) and (stateChangedEvent.session != session)) {

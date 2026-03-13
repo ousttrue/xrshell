@@ -1,83 +1,10 @@
 const std = @import("std");
 const c = @import("c");
-const Options = @This();
-
-pub const ReferenceSpaceType = enum {
-    View,
-    ViewFront,
-    Local,
-    Stage,
-    StageLeft,
-    StageRight,
-    StageLeftRotated,
-    StageRightRotated,
-
-    pub fn makeXrReferenceSpaceCreateInfo(this: @This()) c.XrReferenceSpaceCreateInfo {
-        var referenceSpaceCreateInfo: c.XrReferenceSpaceCreateInfo = .{
-            .type = c.XR_TYPE_REFERENCE_SPACE_CREATE_INFO,
-            .poseInReferenceSpace = Identity(),
-        };
-        switch (this) {
-            .View => {
-                referenceSpaceCreateInfo.referenceSpaceType = c.XR_REFERENCE_SPACE_TYPE_VIEW;
-            },
-            .ViewFront => {
-                // Render head-locked 2m in front of device.
-                referenceSpaceCreateInfo.poseInReferenceSpace = Translation(.{ .x = 0.0, .y = 0.0, .z = -2.0 });
-                referenceSpaceCreateInfo.referenceSpaceType = c.XR_REFERENCE_SPACE_TYPE_VIEW;
-            },
-            .Local => {
-                referenceSpaceCreateInfo.referenceSpaceType = c.XR_REFERENCE_SPACE_TYPE_LOCAL;
-            },
-            .Stage => {
-                referenceSpaceCreateInfo.referenceSpaceType = c.XR_REFERENCE_SPACE_TYPE_STAGE;
-            },
-            .StageLeft => {
-                referenceSpaceCreateInfo.poseInReferenceSpace = RotateCCWAboutYAxis(0.0, .{ .x = -2.0, .y = 0.0, .z = -2.0 });
-                referenceSpaceCreateInfo.referenceSpaceType = c.XR_REFERENCE_SPACE_TYPE_STAGE;
-            },
-            .StageRight => {
-                referenceSpaceCreateInfo.poseInReferenceSpace = RotateCCWAboutYAxis(0.0, .{ .x = 2.0, .y = 0.0, .z = -2.0 });
-                referenceSpaceCreateInfo.referenceSpaceType = c.XR_REFERENCE_SPACE_TYPE_STAGE;
-            },
-            .StageLeftRotated => {
-                referenceSpaceCreateInfo.poseInReferenceSpace = RotateCCWAboutYAxis(3.14 / 3.0, .{ .x = -2.0, .y = 0.5, .z = -2.0 });
-                referenceSpaceCreateInfo.referenceSpaceType = c.XR_REFERENCE_SPACE_TYPE_STAGE;
-            },
-            .StageRightRotated => {
-                referenceSpaceCreateInfo.poseInReferenceSpace = RotateCCWAboutYAxis(-3.14 / 3.0, .{ .x = 2.0, .y = 0.5, .z = -2.0 });
-                referenceSpaceCreateInfo.referenceSpaceType = c.XR_REFERENCE_SPACE_TYPE_STAGE;
-            },
-        }
-        return referenceSpaceCreateInfo;
-    }
-
-    pub fn Identity() c.XrPosef {
-        return .{
-            .orientation = .{ .w = 1 },
-        };
-    }
-
-    pub fn Translation(translation: c.XrVector3f) c.XrPosef {
-        var t = Identity();
-        t.position = translation;
-        return t;
-    }
-
-    pub fn RotateCCWAboutYAxis(radians: f32, translation: c.XrVector3f) c.XrPosef {
-        var t = Identity();
-        t.orientation.x = 0.0;
-        t.orientation.y = @sin(radians * 0.5);
-        t.orientation.z = 0.0;
-        t.orientation.w = @cos(radians * 0.5);
-        t.position = translation;
-        return t;
-    }
-};
+const AppSpaceType = @import("xr_types.zig").AppSpaceType;
 
 FormFactor: c.XrFormFactor = c.XR_FORM_FACTOR_HEAD_MOUNTED_DISPLAY,
 ViewConfigType: c.XrViewConfigurationType = c.XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO,
-AppSpace: ReferenceSpaceType = .Local,
+AppSpace: AppSpaceType = .Local,
 
 pub fn init(argv: [][*:0]u8) !@This() {
     var this: @This() = .{};
@@ -91,7 +18,7 @@ pub fn init(argv: [][*:0]u8) !@This() {
             this.ViewConfigType = try GetXrViewConfigurationType(getNextArg(argv, &i));
         } else if (std.ascii.eqlIgnoreCase(arg, "--space") or std.ascii.eqlIgnoreCase(arg, "-s")) {
             const val = getNextArg(argv, &i);
-            inline for (@typeInfo(ReferenceSpaceType).@"enum".fields) |f| {
+            inline for (@typeInfo(AppSpaceType).@"enum".fields) |f| {
                 if (std.ascii.eqlIgnoreCase(f.name, val)) {
                     this.AppSpace = @enumFromInt(f.value);
                 }

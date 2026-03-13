@@ -4,7 +4,7 @@ const xr_result = @import("xr_result.zig");
 const XrError = xr_result.XrError;
 const XrResult = xr_result.XrResult;
 const Cube = @import("../Cube.zig");
-const Options = @import("Options.zig");
+const xr_types = @import("xr_types.zig");
 
 pub const Side = struct {
     pub const LEFT = 0;
@@ -44,7 +44,7 @@ pub fn init(
         .session = session,
     };
 
-    const visualizedSpaces = [_]Options.ReferenceSpaceType{
+    const visualizedSpaces = [_]xr_types.AppSpaceType{
         .ViewFront, .Local, .Stage, .StageLeft, .StageRight, .StageLeftRotated, .StageRightRotated,
     };
     for (visualizedSpaces) |visualizedSpace| {
