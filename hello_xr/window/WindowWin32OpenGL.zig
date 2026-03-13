@@ -331,6 +331,7 @@ windowActiveState: bool,
 pub fn create(
     allocator: std.mem.Allocator,
 ) *@This() {
+    std.log.info("## WindowWin32OpenGL.create ##", .{});
     const this = allocator.create(@This()) catch @panic("OOM");
     this.* = .{
         .allocator = allocator,
@@ -470,6 +471,7 @@ pub fn create(
 }
 
 pub fn destroy(this: *@This()) void {
+    std.log.info("## WindowWin32OpenGL.destroy ##", .{});
     this.context.destroy();
 
     //     if (this.windowFullscreen) {

@@ -6,7 +6,6 @@ const XrResult = xrs.XrResult;
 const Window = @import("window/WindowAndroidOpenGLES.zig");
 const binding = @import("gfx/graphicsplugin_opengles.zig").binding;
 const App = @import("App.zig");
-const Renderer = @import("gfx/OpenGLRenderer.zig");
 const shaders = @import("gfx/shaders.zig");
 
 pub const std_options: std.Options = .{
@@ -111,7 +110,8 @@ export fn android_main(app: *c.android_app) void {
     var window = Window.create(allocator);
     defer window.destroy();
 
-    var renderer: Renderer = .init(allocator, shaders.es3.vs, shaders.es3.fs);
+    // var renderer: @import("gfx/OpenGLRenderer.zig") = .init(allocator, shaders.es3.vs, shaders.es3.fs);
+    var renderer: @import("gfx/SokolRenderer.zig") = .init(allocator);
     defer renderer.deinit();
 
     // Initialize the loader for this platform

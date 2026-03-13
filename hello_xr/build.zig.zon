@@ -16,6 +16,10 @@
             .url = "https://github.com/the-argus/zig-compile-commands/archive/70fb439897e12cae896c071717d7c9c382918689.tar.gz",
             .hash = "zig_compile_commands-0.0.1-OZg5-ULBAABTh3NXO3WXoSUX1474ez0EouuoT2yDANhz",
         },
+        .sokol = .{
+            .url = "git+https://github.com/floooh/sokol-zig.git#de5906fb0f81f96e92c1c67a2b8a24dc50872207",
+            .hash = "sokol-0.1.0-pb1HK9ngNgD_m7L3HpbsyJ-jHRGVzcd672pjJDEPBQWh",
+        },
     },
     .paths = .{
         "build.zig",

@@ -1,6 +1,7 @@
 const std = @import("std");
 const zcc = @import("compile_commands");
 const zbk = @import("zbk");
+const sokol = @import("sokol");
 
 const BUILD_NAME = "hello_xr";
 const PKG_NAME = "com.zig." ++ BUILD_NAME;
@@ -35,6 +36,18 @@ pub fn build(b: *std.Build) !void {
     std.log.info("{s}({s})", .{ try target.result.linuxTriple(b.allocator), @tagName(optimize) });
 
     const openxr_dep = b.dependency("openxr", .{});
+    const sokol_dep = if (target.result.abi.isAndroid())
+        b.dependency("sokol", .{
+            .target = target,
+            .optimize = optimize,
+            .gles3 = true,
+        })
+    else
+        b.dependency("sokol", .{
+            .target = target,
+            .optimize = optimize,
+            .gl = true,
+        });
 
     const bin = if (target.result.abi.isAndroid()) blk: {
         const lib = b.addLibrary(.{
@@ -61,12 +74,17 @@ pub fn build(b: *std.Build) !void {
             .opt);
 
         const libc_file = try zbk.android.ndk.LibCFile.make(b, sdk_info.ndk_path, target, API_LEVEL);
+        const sokol_clib = sokol_dep.artifact("sokol_clib");
         // for compile
         lib.addSystemIncludePath(.{ .cwd_relative = libc_file.include_dir });
         lib.addSystemIncludePath(.{ .cwd_relative = libc_file.sys_include_dir });
+        sokol_clib.addSystemIncludePath(.{ .cwd_relative = libc_file.include_dir });
+        sokol_clib.addSystemIncludePath(.{ .cwd_relative = libc_file.sys_include_dir });
         // for link
         lib.setLibCFile(libc_file.path);
         lib.addLibraryPath(.{ .cwd_relative = libc_file.crt_dir });
+        sokol_clib.setLibCFile(libc_file.path);
+        sokol_clib.addLibraryPath(.{ .cwd_relative = libc_file.crt_dir });
 
         // native_app_glue (android_main dependency)
         lib.addCSourceFile(.{ .file = .{ .cwd_relative = b.fmt(
@@ -235,6 +253,32 @@ pub fn build(b: *std.Build) !void {
     };
     targets.append(b.allocator, bin) catch @panic("OOM");
     b.installArtifact(bin);
+
+    // sokol
+    bin.step.dependOn(sokol_dep.builder.getInstallStep());
+    const sokol_mod = sokol_dep.module("sokol");
+    bin.root_module.addImport("sokol", sokol_mod);
+    const shdc_dep = sokol_dep.builder.dependency("shdc", .{});
+    const shd_mod =
+        if (target.result.abi.isAndroid())
+            try sokol.shdc.createModule(b, "shader", sokol_mod, .{
+                .shdc_dep = shdc_dep,
+                .input = "cube.glsl",
+                .output = "shader.zig",
+                .slang = .{
+                    .glsl310es = true,
+                },
+            })
+        else
+            try sokol.shdc.createModule(b, "shader", sokol_mod, .{
+                .shdc_dep = shdc_dep,
+                .input = "cube.glsl",
+                .output = "shader.zig",
+                .slang = .{
+                    .glsl430 = true,
+                },
+            });
+    bin.root_module.addImport("shd", shd_mod);
 
     // const xr_util = b.addModule("xr_util", .{
     //     .root_source_file = b.path("xr_util/xr_util.zig"),

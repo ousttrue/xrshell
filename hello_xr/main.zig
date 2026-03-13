@@ -12,7 +12,6 @@ else
     @import("gfx/graphicsplugin_opengles.zig").binding;
 const Window = @import("window/window.zig").Window;
 const App = @import("App.zig");
-const Renderer = @import("gfx/OpenGLRenderer.zig");
 const shaders = @import("gfx/shaders.zig");
 
 pub const std_options: std.Options = .{
@@ -34,7 +33,8 @@ pub fn main() !void {
     const window = Window.create(allocator);
     defer window.destroy();
 
-    var renderer = Renderer.init(allocator, shaders.gl4.vs, shaders.gl4.fs);
+    // var renderer = @import("gfx/OpenGLRenderer.zig").init(allocator, shaders.gl4.vs, shaders.gl4.fs);
+    var renderer = @import("gfx/SokolRenderer.zig").init(allocator);
     defer renderer.deinit();
 
     while (!quit_key.quitKeyPressed) {

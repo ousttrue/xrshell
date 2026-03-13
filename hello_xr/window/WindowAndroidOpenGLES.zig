@@ -344,6 +344,7 @@ input: ksGpuWindowInput,
 // Java_t: c.java,
 
 pub fn create(allocator: std.mem.Allocator) *@This() {
+    std.log.info("## WindowAndroidOpenGLES.create ##", .{});
     const this = allocator.create(@This()) catch @panic("OOM");
     this.* = .{
         .allocator = allocator,
@@ -411,6 +412,7 @@ pub fn create(allocator: std.mem.Allocator) *@This() {
 }
 
 pub fn destroy(this: *@This()) void {
+    std.log.info("## WindowAndroidOpenGLES.destroy ##", .{});
     ksGpuContext_Destroy(&this.context);
     ksGpuDevice_Destroy(&this.device);
     this.allocator.destroy(this);
