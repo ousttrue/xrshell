@@ -5,12 +5,12 @@ const XrError = xrs.XrError;
 const XrResult = xrs.XrResult;
 const Window = @import("window/WindowAndroidOpenGLES.zig");
 const binding = @import("gfx/graphicsplugin_opengles.zig").binding;
-const Renderer = @import("gfx/RendererOpenGLES.zig");
 const App = @import("App.zig");
-const android_logger = @import("android/android_logger.zig");
+const Renderer = @import("gfx/OpenGLRenderer.zig");
+const shaders = @import("gfx/shaders.zig");
 
 pub const std_options: std.Options = .{
-    .logFn = android_logger.logFn,
+    .logFn = @import("android/android_logger.zig").logFn,
     .log_level = .debug,
 };
 
@@ -111,6 +111,9 @@ export fn android_main(app: *c.android_app) void {
     var window = Window.create(allocator);
     defer window.destroy();
 
+    var renderer: Renderer = .init(allocator, shaders.es3.vs, shaders.es3.fs);
+    defer renderer.deinit();
+
     // Initialize the loader for this platform
     var initializeLoader: c.PFN_xrInitializeLoaderKHR = null;
     if (c.XR_SUCCEEDED(c.xrGetInstanceProcAddr(null, "xrInitializeLoaderKHR", &initializeLoader))) {
@@ -138,13 +141,28 @@ export fn android_main(app: *c.android_app) void {
         options.FormFactor,
         options.ViewConfigType,
         @ptrCast(&binding.makeBinding(window.context)),
-        binding.getSupportedSwapchainSampleCount(),
-        options.AppSpace,
     ) catch @panic("App.init");
     defer xr_app.deinit();
 
-    var renderer: Renderer = .init(allocator);
-    defer renderer.deinit();
+    var action = xrs.Action.init(
+        allocator,
+        xr_app.instance.instance,
+        xr_app.session.session,
+    ) catch @panic("Action.init");
+    defer action.deinit();
+
+    var stereo_view = xrs.StereoView.init(
+        allocator,
+        xr_app.instance.instance,
+        xr_app.instance.systemId,
+        xr_app.session.session,
+        xr_app.session.swapchainFormats,
+        c.GL_DEPTH_COMPONENT24,
+        binding.getSupportedSwapchainSampleCount(),
+        options.ViewConfigType,
+        options.AppSpace,
+    ) catch @panic("StereoView.init");
+    defer stereo_view.deinit();
 
     std.log.warn("Loop start", .{});
     while (app.destroyRequested == 0) {
@@ -165,10 +183,39 @@ export fn android_main(app: *c.android_app) void {
             }
         }
 
-        const next = xr_app.run_frame(&renderer) catch @panic("run_frame");
+        const next = xr_app.run_frame() catch @panic("run_frame");
         switch (next) {
             .next => continue,
             .quit => break,
+            .restart => break,
+            .render => {
+                // begin frame
+                const frameState = stereo_view.beginFrame() catch @panic("beginFrame");
+
+                // scene
+                action.pollActions() catch @panic("pollActions");
+                const cubes = action.update(
+                    stereo_view.space,
+                    frameState.predictedDisplayTime,
+                ) catch @panic("action.update");
+
+                var layer_projection = stereo_view.renderProjectionLayer(
+                    frameState,
+                    &renderer,
+                    .OPENGL,
+                    cubes,
+                ) catch @panic("renderProjectionLayer");
+
+                // composition !
+                stereo_view.endFrame(
+                    frameState.predictedDisplayTime,
+                    stereo_view.blend_mode,
+                    if (layer_projection) |*l|
+                        @ptrCast(l)
+                    else
+                        null,
+                ) catch @panic("endFrame");
+            },
         }
     }
 

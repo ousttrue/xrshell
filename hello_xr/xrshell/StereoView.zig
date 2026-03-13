@@ -30,7 +30,8 @@ blend_mode: c.XrEnvironmentBlendMode,
 swapchains: std.ArrayList(Swapchain) = .{},
 configViews: std.ArrayList(c.XrViewConfigurationView) = .{},
 views: std.ArrayList(c.XrView) = .{},
-colorSwapchainFormat: i64,
+color_format: i64,
+depth_format: i32,
 sampleCount: u32,
 swapchainImages: std.ArrayList([]*c.XrSwapchainImageBaseHeader) = .{},
 swapchainImageBuffers: std.ArrayList([]@TypeOf(binding.swapchain_image)) = .{},
@@ -42,6 +43,7 @@ pub fn init(
     systemId: c.XrSystemId,
     session: c.XrSession,
     swapchainFormats: []i64,
+    depth_format: i32,
     sampleCount: u32,
     view_config_type: c.XrViewConfigurationType,
     app_space: xr_types.AppSpaceType,
@@ -62,7 +64,8 @@ pub fn init(
         .instance = instance,
         .systemId = systemId,
         .session = session,
-        .colorSwapchainFormat = colorSwapchainFormat,
+        .color_format = colorSwapchainFormat,
+        .depth_format = depth_format,
         .sampleCount = sampleCount,
         .view_config_type = view_config_type,
         .blend_mode = blend_mode,
@@ -242,7 +245,7 @@ pub fn CreateSwapchains(
         var swapchainCreateInfo: c.XrSwapchainCreateInfo = .{
             .type = c.XR_TYPE_SWAPCHAIN_CREATE_INFO,
             .arraySize = 1,
-            .format = this.colorSwapchainFormat,
+            .format = this.color_format,
             .width = vp.recommendedImageRectWidth,
             .height = vp.recommendedImageRectHeight,
             .mipCount = 1,
@@ -406,16 +409,17 @@ pub fn renderProjectionLayer(
         //
         // render
         //
-        try renderer.renderView(
+        renderer.renderView(
             &acquired.projection_layer_view,
             color_texture,
-            this.colorSwapchainFormat,
+            this.color_format,
+            this.depth_format,
             getBackgroundClearColor(this.blend_mode),
             vp,
             cubes,
-        );
+        ) catch @panic("renderView");
 
-        try this.releaseSwapchain(acquired.handle);
+        this.releaseSwapchain(acquired.handle) catch @panic("releaseSwapchain");
     }
     // composition layer
     return .{

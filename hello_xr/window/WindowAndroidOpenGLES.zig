@@ -413,4 +413,5 @@ pub fn create(allocator: std.mem.Allocator) *@This() {
 pub fn destroy(this: *@This()) void {
     ksGpuContext_Destroy(&this.context);
     ksGpuDevice_Destroy(&this.device);
+    this.allocator.destroy(this);
 }

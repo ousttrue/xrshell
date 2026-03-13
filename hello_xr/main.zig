@@ -11,8 +11,9 @@ const binding = if (builtin.os.tag == .windows)
 else
     @import("gfx/graphicsplugin_opengles.zig").binding;
 const Window = @import("window/window.zig").Window;
-const Renderer = @import("gfx/RendererOpenGL4.zig");
 const App = @import("App.zig");
+const Renderer = @import("gfx/OpenGLRenderer.zig");
+const shaders = @import("gfx/shaders.zig");
 
 pub const std_options: std.Options = .{
     .logFn = console_color_logger.logFn,
@@ -33,7 +34,7 @@ pub fn main() !void {
     const window = Window.create(allocator);
     defer window.destroy();
 
-    var renderer = Renderer.init(allocator);
+    var renderer = Renderer.init(allocator, shaders.gl4.vs, shaders.gl4.fs);
     defer renderer.deinit();
 
     while (!quit_key.quitKeyPressed) {
@@ -59,6 +60,7 @@ pub fn main() !void {
             app.instance.systemId,
             app.session.session,
             app.session.swapchainFormats,
+            c.GL_DEPTH_COMPONENT32,
             binding.getSupportedSwapchainSampleCount(),
             options.ViewConfigType,
             options.AppSpace,
