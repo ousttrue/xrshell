@@ -9,6 +9,8 @@ const binding = if (builtin.os.tag == .windows)
 else
     @import("../gfx/graphicsplugin_opengles.zig").binding;
 const Cube = @import("../Cube.zig");
+const xr_util = @import("xr_util.zig");
+const Options = @import("Options.zig");
 
 const Swapchain = struct {
     handle: c.XrSwapchain,
@@ -20,6 +22,7 @@ allocator: std.mem.Allocator,
 instance: c.XrInstance,
 systemId: c.XrSystemId,
 session: c.XrSession,
+space: c.XrSpace,
 view_config_type: c.XrViewConfigurationType,
 blend_mode: c.XrEnvironmentBlendMode,
 
@@ -37,15 +40,21 @@ pub fn init(
     instance: c.XrInstance,
     systemId: c.XrSystemId,
     session: c.XrSession,
-    view_config_type: c.XrViewConfigurationType,
-    blend_mode: c.XrEnvironmentBlendMode,
     swapchainFormats: []i64,
     sampleCount: u32,
+    view_config_type: c.XrViewConfigurationType,
+    app_space: Options.ReferenceSpaceType,
 ) !@This() {
+    std.log.info("## StereoView.init ##", .{});
+
     // Select a swapchain format.
     const colorSwapchainFormat = try binding.selectColorSwapchainFormat(allocator, swapchainFormats);
 
-    std.log.info("## OpenXrProgram.init ##", .{});
+    const blend_mode = try xr_util.getPreferredBlendMode(allocator, instance, systemId, view_config_type);
+
+    const referenceSpaceCreateInfo = app_space.makeXrReferenceSpaceCreateInfo();
+    var space: c.XrSpace = null;
+    _ = try XrResult.init(c.xrCreateReferenceSpace(session, &referenceSpaceCreateInfo, &space));
 
     var this: @This() = .{
         .allocator = allocator,
@@ -56,6 +65,7 @@ pub fn init(
         .sampleCount = sampleCount,
         .view_config_type = view_config_type,
         .blend_mode = blend_mode,
+        .space = space,
     };
 
     this.logFormats(swapchainFormats, colorSwapchainFormat);
@@ -66,7 +76,11 @@ pub fn init(
 }
 
 pub fn deinit(this: *@This()) void {
-    std.log.info("## OpenXrProgram.deinit ##", .{});
+    std.log.info("## StereoView.deinit ##", .{});
+
+    if (this.space != null) {
+        _ = c.xrDestroySpace(this.space);
+    }
 
     this.projectionLayerViews.deinit(this.allocator);
 

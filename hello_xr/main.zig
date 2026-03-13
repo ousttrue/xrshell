@@ -47,17 +47,41 @@ pub fn main() !void {
             options.FormFactor,
             options.ViewConfigType,
             @ptrCast(&binding.makeBinding(window.context)),
-            binding.getSupportedSwapchainSampleCount(),
-            options.AppSpace,
         );
         defer app.deinit();
 
+        var action = try xrs.Action.init(allocator, app.instance.instance, app.session.session);
+        defer action.deinit();
+
+        var stereo_view = try xrs.StereoView.init(
+            allocator,
+            app.instance.instance,
+            app.instance.systemId,
+            app.session.session,
+            app.session.swapchainFormats,
+            binding.getSupportedSwapchainSampleCount(),
+            options.ViewConfigType,
+            options.AppSpace,
+        );
+        defer stereo_view.deinit();
+
         std.log.warn("Loop start", .{});
         while (!quit_key.quitKeyPressed) {
-            const next = try app.run_frame(&renderer);
+            const next = try app.run_frame();
             switch (next) {
                 .quit => break,
                 .next => continue,
+                .restart => {},
+                .render => {
+                    // begin frame
+                    const frameState = try stereo_view.beginFrame();
+
+                    // scene
+                    try action.pollActions();
+                    const cubes = try action.update(stereo_view.space, frameState.predictedDisplayTime);
+
+                    try stereo_view.composite(frameState, stereo_view.space, &renderer, cubes);
+                },
             }
         }
         break;
