@@ -11,6 +11,7 @@ else
 const Cube = @import("../Cube.zig");
 const xr_util = @import("xr_util.zig");
 const xr_types = @import("xr_types.zig");
+const xr_linear = @import("../gfx/xr_linear.zig");
 
 const Swapchain = struct {
     handle: c.XrSwapchain,
@@ -372,63 +373,65 @@ const NextFrame = enum {
     restart,
 };
 
-pub fn composite(
+pub fn renderProjectionLayer(
     this: *@This(),
     frameState: c.XrFrameState,
-    space: c.XrSpace,
     renderer: anytype,
+    api: xr_linear.GraphicsAPI,
     cubes: []const Cube,
-) !void {
-    var layer_projection: ?c.XrCompositionLayerProjection = null;
-    if (frameState.shouldRender == c.XR_TRUE) {
-        if (try this.locate(
-            space,
-            frameState.predictedDisplayTime,
-            this.view_config_type,
-        )) {
-
-            // render
-            try this.projectionLayerViews.resize(this.allocator, this.views.items.len);
-            for (0..this.swapchains.items.len) |i| {
-                const acquired = try this.acquireSwapchain(i);
-                this.projectionLayerViews.items[i] = acquired.projection_layer_view;
-                const color_texture = this.getTexture(i, acquired.swapchainImageIndex);
-                try renderer.renderView(
-                    &acquired.projection_layer_view,
-                    color_texture,
-                    this.colorSwapchainFormat,
-                    getBackgroundClearColor(this.blend_mode),
-                    cubes,
-                );
-
-                try this.releaseSwapchain(acquired.handle);
-            }
-            // composition layer
-            layer_projection = .{
-                .type = c.XR_TYPE_COMPOSITION_LAYER_PROJECTION,
-                .space = space,
-                .layerFlags = if (this.blend_mode == c.XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND)
-                    c.XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT |
-                        c.XR_COMPOSITION_LAYER_UNPREMULTIPLIED_ALPHA_BIT
-                else
-                    0,
-                .viewCount = @intCast(this.projectionLayerViews.items.len),
-                .views = this.projectionLayerViews.items.ptr,
-            };
-        }
+) !?c.XrCompositionLayerProjection {
+    if (frameState.shouldRender != c.XR_TRUE) {
+        return null;
     }
-    // composition !
-    try this.endFrame(
+    if (!try this.locate(
+        this.space,
         frameState.predictedDisplayTime,
-        this.blend_mode,
-        if (layer_projection) |*l|
-            @ptrCast(l)
+        this.view_config_type,
+    )) {
+        return null;
+    }
+    // render
+    try this.projectionLayerViews.resize(this.allocator, this.views.items.len);
+
+    for (0..this.swapchains.items.len) |i| {
+        const acquired = try this.acquireSwapchain(i);
+        this.projectionLayerViews.items[i] = acquired.projection_layer_view;
+        const color_texture = this.getTexture(i, acquired.swapchainImageIndex);
+
+        const proj = xr_linear.XrMatrix4x4f_CreateProjectionFov(api, acquired.projection_layer_view.fov, 0.05, 100.0);
+        const transform = xr_linear.XrMatrix4x4f_CreateFromRigidTransform(acquired.projection_layer_view.pose);
+        const view = xr_linear.XrMatrix4x4f_InvertRigidBody(transform);
+        const vp = xr_linear.XrMatrix4x4f_Multiply(proj, view);
+
+        //
+        // render
+        //
+        try renderer.renderView(
+            &acquired.projection_layer_view,
+            color_texture,
+            this.colorSwapchainFormat,
+            getBackgroundClearColor(this.blend_mode),
+            vp,
+            cubes,
+        );
+
+        try this.releaseSwapchain(acquired.handle);
+    }
+    // composition layer
+    return .{
+        .type = c.XR_TYPE_COMPOSITION_LAYER_PROJECTION,
+        .space = this.space,
+        .layerFlags = if (this.blend_mode == c.XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND)
+            c.XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT |
+                c.XR_COMPOSITION_LAYER_UNPREMULTIPLIED_ALPHA_BIT
         else
-            null,
-    );
+            0,
+        .viewCount = @intCast(this.projectionLayerViews.items.len),
+        .views = this.projectionLayerViews.items.ptr,
+    };
 }
 
-pub fn getBackgroundClearColor(environmentBlendMode: c.XrEnvironmentBlendMode) [4]f32 {
+fn getBackgroundClearColor(environmentBlendMode: c.XrEnvironmentBlendMode) [4]f32 {
     const SlateGrey = [4]f32{ 0.184313729, 0.309803933, 0.309803933, 1.0 };
     const TransparentBlack = [4]f32{ 0.0, 0.0, 0.0, 0.0 };
     const Black = [4]f32{ 0.0, 0.0, 0.0, 1.0 };

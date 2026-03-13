@@ -149,11 +149,25 @@ pub fn pollEvents(
                 const oldState = @as(*const xr_types.SessionState, @ptrCast(&this.sessionState)).*;
                 const newState = @as(*const xr_types.SessionState, @ptrCast(&stateChangedEvent.state)).*;
                 this.sessionState = stateChangedEvent.state;
-                std.log.debug("XrEventDataSessionStateChanged: time={}: {}->{}", .{
-                    stateChangedEvent.time,
-                    oldState,
-                    newState,
-                });
+                if (newState == .FOCUSED) {
+                    std.log.info("XrEventDataSessionStateChanged: time={}: {}->{}", .{
+                        stateChangedEvent.time,
+                        oldState,
+                        newState,
+                    });
+                } else if (oldState == .FOCUSED) {
+                    std.log.warn("XrEventDataSessionStateChanged: time={}: {}->{}", .{
+                        stateChangedEvent.time,
+                        oldState,
+                        newState,
+                    });
+                } else {
+                    std.log.debug("XrEventDataSessionStateChanged: time={}: {}->{}", .{
+                        stateChangedEvent.time,
+                        oldState,
+                        newState,
+                    });
+                }
 
                 // if ((stateChangedEvent.session != null) and (stateChangedEvent.session != session)) {
                 //     std.log.err("XrEventDataSessionStateChanged for unknown session", .{});

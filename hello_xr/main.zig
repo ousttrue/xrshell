@@ -80,7 +80,22 @@ pub fn main() !void {
                     try action.pollActions();
                     const cubes = try action.update(stereo_view.space, frameState.predictedDisplayTime);
 
-                    try stereo_view.composite(frameState, stereo_view.space, &renderer, cubes);
+                    var layer_projection = try stereo_view.renderProjectionLayer(
+                        frameState,
+                        &renderer,
+                        .OPENGL,
+                        cubes,
+                    );
+
+                    // composition !
+                    try stereo_view.endFrame(
+                        frameState.predictedDisplayTime,
+                        stereo_view.blend_mode,
+                        if (layer_projection) |*l|
+                            @ptrCast(l)
+                        else
+                            null,
+                    );
                 },
             }
         }

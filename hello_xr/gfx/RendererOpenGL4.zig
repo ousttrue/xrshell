@@ -3,6 +3,8 @@ const c = @import("c");
 const Cube = @import("../Cube.zig");
 const xr_linear = @import("xr_linear.zig");
 
+pub const api: xr_linear.GraphicsAPI = .OPENGL;
+
 const VertexShaderGlsl: [*:0]const u8 =
     \\#version 410
     \\
@@ -203,6 +205,7 @@ pub fn renderView(
     colorTexture: u32,
     swapchainFormat: i64,
     clear_color: [4]f32,
+    vp: xr_linear.XrMatrix4x4f,
     cubes: []const Cube,
 ) !void {
     _ = swapchainFormat;
@@ -234,11 +237,6 @@ pub fn renderView(
 
     // Set shaders and uniform variables.
     c.glUseProgram(this.program);
-
-    const proj = xr_linear.XrMatrix4x4f_CreateProjectionFov(.OPENGL, layerView.fov, 0.05, 100.0);
-    const toView = xr_linear.XrMatrix4x4f_CreateFromRigidTransform(layerView.pose);
-    const view = xr_linear.XrMatrix4x4f_InvertRigidBody(toView);
-    const vp = xr_linear.XrMatrix4x4f_Multiply(proj, view);
 
     // Set cube primitive data.
     c.glBindVertexArray(this.vao);
